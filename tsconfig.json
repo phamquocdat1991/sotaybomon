@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "db", "worker", "examples", "build", "dist", "SKILL EDUCATION*", "SKILL EDUCATION V3.1", "SKILL EDUCATION"]
+  "exclude": ["node_modules", "db", "worker", "examples", "build", "dist", "vite.config.ts", "SKILL EDUCATION*", "SKILL EDUCATION V3.1", "SKILL EDUCATION"]
 }
