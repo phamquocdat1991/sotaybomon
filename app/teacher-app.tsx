@@ -38,7 +38,8 @@ type Student = {
 type ScheduleEntry = { id: string; day: number; period: number; classId: string; room: string; note: string };
 type AuditEntry = { id: string; at: string; action: string };
 type AppData = {
-  title: string; schoolYear: string; semester: string; subject: string;
+  title: string; teacherName: string; schoolName: string;
+  schoolYear: string; semester: string; subject: string;
   classes: Classroom[]; students: Student[]; schedule: ScheduleEntry[];
   scoreWeights: Record<string, number>;
   auditLog: AuditEntry[];
@@ -71,7 +72,8 @@ const students: Student[] = [
 });
 
 const initialData: AppData = {
-  title: "Sổ tay bộ môn Địa lý", schoolYear: "2025–2026", semester: "Học kỳ I", subject: "Địa lý",
+  title: "SỔ TAY BỘ MÔN", teacherName: "Mai Hoa", schoolName: "THCS Chu Văn An",
+  schoolYear: "2025–2026", semester: "Học kỳ I", subject: "Địa lý",
   classes: [
     { id: "c8a2", name: "Lớp 8A2", grade: 8, room: "Phòng Chồi 8", studentIds: ["s01","s02","s03","s04"] },
     { id: "c11b6", name: "Lớp 11B6", grade: 11, room: "Phòng Chồi 11", studentIds: ["s05","s06","s07","s08","s09"] },
@@ -104,6 +106,10 @@ function normalizeData(value: Partial<AppData>): AppData {
   return {
     ...fallback,
     ...value,
+    title: "SỔ TAY BỘ MÔN",
+    teacherName: typeof value.teacherName === "string" && value.teacherName.trim() ? value.teacherName.trim() : fallback.teacherName,
+    schoolName: typeof value.schoolName === "string" ? value.schoolName.trim() : fallback.schoolName,
+    subject: typeof value.subject === "string" && value.subject.trim() ? value.subject.trim() : fallback.subject,
     classes: sourceClasses.map((classroom) => ({
       ...classroom,
       studentIds: Array.isArray(classroom.studentIds)
@@ -118,6 +124,7 @@ function normalizeData(value: Partial<AppData>): AppData {
 }
 
 function describeChange(previous: AppData, next: AppData) {
+  if (previous.teacherName !== next.teacherName || previous.schoolName !== next.schoolName || previous.subject !== next.subject) return "Cập nhật thông tin giáo viên & môn học";
   if (previous.students.length !== next.students.length) return next.students.length > previous.students.length ? "Thêm học sinh vào lớp" : "Cập nhật danh sách học sinh";
   if (JSON.stringify(previous.schedule) !== JSON.stringify(next.schedule)) return "Cập nhật thời khóa biểu";
   if (previous.classes.length !== next.classes.length) return "Cập nhật danh sách lớp";
@@ -177,7 +184,7 @@ export default function TeacherApp() {
       <div className="topbar-main">
         <button className="brand" onClick={() => navigate("dashboard")} aria-label="Về trang tổng quan">
           <span className="brand-mark"><BookOpenCheck /></span>
-          <span className="brand-copy"><strong>{data.title.toUpperCase()}</strong><small>GV: Mai Hoa · {data.subject}</small></span>
+          <span className="brand-copy"><strong>SỔ TAY BỘ MÔN</strong><small>GV: {data.teacherName || "Mai Hoa"}{data.schoolName ? ` · ${data.schoolName}` : ""} · {data.subject || "Địa lý"}</small></span>
           <span className="edition">QUẢN LÝ 4.0</span>
         </button>
         <div className="context-bar">
@@ -545,10 +552,39 @@ function ProfilesPage({ data, students, classroom, navigate }: { data: AppData; 
 }
 
 function SettingsPage({ data, setData }: { data: AppData; setData: DataSetter }) {
+  const [teacherName, setTeacherName] = useState(data.teacherName || "Mai Hoa");
+  const [schoolName, setSchoolName] = useState(data.schoolName || "");
+  const [subject, setSubject] = useState(data.subject || "Địa lý");
   const [newClass, setNewClass] = useState("");
   const [newGrade, setNewGrade] = useState("8");
   const backupRef = useRef<HTMLInputElement>(null);
-  const subjects = ["Địa lý","Toán học","Tiếng Anh","Ngữ văn","Sinh học","Hóa học","Lịch sử","Tin học"];
+  const subjects = [
+    "Địa lý", "KHTN", "Toán học", "Tiếng Anh", "Ngữ văn",
+    "Lịch sử & Địa lý", "Sinh học", "Hóa học", "Lịch sử", "Tin học", "Công nghệ", "GDCD"
+  ];
+
+  useEffect(() => {
+    setTeacherName(data.teacherName || "Mai Hoa");
+    setSchoolName(data.schoolName || "");
+    setSubject(data.subject || "Địa lý");
+  }, [data.teacherName, data.schoolName, data.subject]);
+
+  const saveGeneral = () => {
+    if (!teacherName.trim()) return toast.error("Vui lòng nhập họ và tên giáo viên.");
+    if (!subject.trim()) return toast.error("Vui lòng nhập hoặc chọn môn học.");
+    setData(
+      {
+        ...data,
+        title: "SỔ TAY BỘ MÔN",
+        teacherName: teacherName.trim(),
+        schoolName: schoolName.trim(),
+        subject: subject.trim(),
+      },
+      "Cập nhật thông tin giáo viên, trường & môn học"
+    );
+    toast.success("Đã lưu thay đổi thông tin giáo viên, trường và môn học.");
+  };
+
   const addClass = () => {
     if (!newClass.trim()) return toast.error("Vui lòng nhập tên lớp.");
     const grade = Number(newGrade);
@@ -575,8 +611,75 @@ function SettingsPage({ data, setData }: { data: AppData; setData: DataSetter })
     if (backupRef.current) backupRef.current.value = "";
   };
   return <div className="stack-xl">
-    <section className="surface page-title"><div><span className="eyebrow green"><Settings2 /> THIẾT LẬP</span><h1>Thiết lập tên sổ tay, năm học & đánh giá bộ môn</h1><p>Tùy chỉnh cấu trúc sử dụng cho sổ tay hiện tại.</p></div></section>
-    <section className="surface settings-section"><h2><BookOpenCheck /> Tên Sổ tay Giảng dạy & Môn học</h2><label>Tên hiển thị sổ tay<input value={data.title} onChange={(event) => setData({ ...data, title: event.target.value })} /></label><span className="field-label">Chọn môn học</span><div className="chip-row subjects">{subjects.map((item) => <button key={item} onClick={() => setData({ ...data, subject: item })} className={data.subject === item ? "chip active" : "chip"}>Sổ tay bộ môn {item}</button>)}</div></section>
+    <section className="surface page-title"><div><span className="eyebrow green"><Settings2 /> THIẾT LẬP</span><h1>Thiết lập thông tin giáo viên, trường & môn học</h1><p>Tùy chỉnh thông tin cá nhân giáo viên, đơn vị trường học và bộ môn giảng dạy.</p></div></section>
+    <section className="surface settings-section">
+      <div className="section-toolbar">
+        <div>
+          <h2><BookOpenCheck /> Thiết lập Giáo viên, Trường & Môn học</h2>
+          <p>Tên hiển thị mặc định: <strong>SỔ TAY BỘ MÔN</strong></p>
+        </div>
+        <Button className="purple-action" onClick={saveGeneral}><Save /> Lưu thay đổi</Button>
+      </div>
+
+      <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.22)", padding: "12px 18px", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "13px", color: "var(--muted-foreground, #64748b)" }}>Tên hiển thị sổ tay:</span>
+          <strong style={{ fontSize: "16px", color: "#065f46", letterSpacing: "0.5px" }}>SỔ TAY BỘ MÔN</strong>
+        </div>
+        <span style={{ fontSize: "11px", background: "#10b981", color: "#ffffff", padding: "3px 10px", borderRadius: "12px", fontWeight: 700 }}>
+          Mặc định hệ thống
+        </span>
+      </div>
+
+      <div className="settings-grid">
+        <label>
+          Tên giáo viên *
+          <input
+            value={teacherName}
+            onChange={(event) => setTeacherName(event.target.value)}
+            placeholder="Nhập tên giáo viên (VD: Mai Hoa, Nguyễn Văn An...)"
+          />
+        </label>
+        <label>
+          Trường
+          <input
+            value={schoolName}
+            onChange={(event) => setSchoolName(event.target.value)}
+            placeholder="Nhập tên trường học (VD: THCS Chu Văn An, THPT Lê Lợi...)"
+          />
+        </label>
+      </div>
+
+      <div style={{ display: "grid", gap: "8px" }}>
+        <label>
+          Môn học *
+          <input
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            placeholder="Nhập tên môn học (VD: KHTN, Địa lý, Toán học...)"
+          />
+        </label>
+        <span className="field-label" style={{ fontSize: "13px", color: "#475569", marginTop: "4px" }}>
+          Hoặc bấm chọn nhanh môn học:
+        </span>
+        <div className="chip-row subjects">
+          {subjects.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setSubject(item)}
+              className={subject === item ? "chip active" : "chip"}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "6px" }}>
+        <Button onClick={saveGeneral}><Save /> Lưu thay đổi</Button>
+      </div>
+    </section>
     <section className="surface settings-section"><h2><CalendarDays /> Quản lý & Chọn Năm học</h2><div className="settings-grid"><label>Năm học<Select value={data.schoolYear} onValueChange={(value) => setData({ ...data, schoolYear: value })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="2025–2026">2025–2026</SelectItem><SelectItem value="2026–2027">2026–2027</SelectItem></SelectContent></Select></label><label>Học kỳ<Select value={data.semester} onValueChange={(value) => setData({ ...data, semester: value })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Học kỳ I">Học kỳ I</SelectItem><SelectItem value="Học kỳ II">Học kỳ II</SelectItem></SelectContent></Select></label></div></section>
     <section className="surface settings-section"><h2><BookOpenCheck /> Hệ số công thức tính điểm môn học</h2><div className="weight-grid">{scoreColumns.map((column) => <label key={column.key}><strong>{column.label}</strong><span>Hệ số tính ĐTB</span><Select value={String(data.scoreWeights[column.key])} onValueChange={(value) => setData({ ...data, scoreWeights: { ...data.scoreWeights, [column.key]: Number(value) } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Hệ số 1</SelectItem><SelectItem value="2">Hệ số 2</SelectItem><SelectItem value="3">Hệ số 3</SelectItem></SelectContent></Select></label>)}</div></section>
     <section className="surface settings-section"><h2><Plus /> Quản lý & Thêm lớp học mới</h2><div className="add-class-row"><Select value={newGrade} onValueChange={setNewGrade}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[6,7,8,9,10,11,12].map((item) => <SelectItem key={item} value={String(item)}>Khối {item}</SelectItem>)}</SelectContent></Select><input value={newClass} onChange={(event) => setNewClass(event.target.value)} placeholder="Tên lớp (VD: 11B2, 11B3...)" /><Button onClick={addClass}><Plus /> Thêm lớp</Button></div><div className="existing-classes">{data.classes.map((item) => <span key={item.id}>{item.name} (Khối {item.grade})</span>)}</div></section>
