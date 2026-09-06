@@ -15,9 +15,19 @@ npm run dev
 2. Import repository đó trong Vercel.
 3. Giữ nguyên thiết lập framework Next.js và bấm Deploy.
 
-Dữ liệu của phiên bản này được lưu bằng `localStorage` trên từng trình duyệt, đúng theo phạm vi đã duyệt; ứng dụng chưa có tài khoản hay cơ sở dữ liệu cloud.
+Dữ liệu của phiên bản này được lưu bằng `localStorage` trên từng trình duyệt; ứng dụng chưa có tài khoản hay cơ sở dữ liệu cloud. Người dùng có thể tải bản sao lưu JSON và khôi phục trên thiết bị khác trong trang Thiết lập.
 
-Các mục Báo cáo và Trợ lý AI được giữ trên thanh điều hướng để khớp video, nhưng chưa triển khai nghiệp vụ vì video không cung cấp đặc tả chi tiết.
+Mục Báo cáo tổng hợp điểm, điểm danh và hoạt động theo lớp. Mục Trợ lý AI hiện là trợ lý nhận xét cục bộ theo quy tắc, không gửi dữ liệu học sinh ra dịch vụ bên ngoài và không yêu cầu API key.
+
+## Nghiệp vụ đã hỗ trợ
+
+- Tổng quan dạng command center theo lớp đang chọn.
+- Thời khóa biểu 38 tuần; thêm, sửa và xác nhận trước khi xóa tiết.
+- Điểm danh, ghi nhận hoạt động, hoàn tác và lưu nhận xét nhanh trong tiết học.
+- Nhập điểm, tính trung bình theo hệ số và xuất CSV.
+- Thêm, sửa, xác nhận trước khi xóa học sinh; nhập `.xlsx`, CSV hoặc dữ liệu dán từ Sheets.
+- Hồ sơ học sinh, báo cáo tiến bộ, trợ lý soạn nhận xét cục bộ và lịch sử thay đổi.
+- Sao lưu/khôi phục JSON và giao diện responsive cho máy tính, máy tính bảng, điện thoại.
 
 ## Thông tin bộ khung
 

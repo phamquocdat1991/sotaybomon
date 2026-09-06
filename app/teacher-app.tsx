@@ -23,7 +23,6 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toaster } from "@/components/ui/sonner";
-import { readSheet } from "read-excel-file/browser";
 
 type PageKey = "dashboard" | "schedule" | "lesson" | "grades" | "classes" | "profiles" | "report" | "assistant" | "settings";
 type AttendanceStatus = "present" | "absent" | "late" | "excused";
@@ -157,6 +156,37 @@ function average(student: Student, weights: Record<string, number>) {
   return values.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight;
 }
 
+function parseDelimitedRow(line: string) {
+  const delimiter = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === delimiter && !quoted) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function AttendanceButtons({ student, onMark }: { student: Student; onMark: (student: Student, status: AttendanceStatus) => void }) {
+  return <div className="attendance-actions" aria-label={`Điểm danh ${student.name}`}>
+    {(Object.keys(attendanceLabel) as AttendanceStatus[]).map((status) => <button key={status} title={attendanceLabel[status]} aria-label={`${attendanceLabel[status]}: ${student.name}`} aria-pressed={student.attendance === status} className={`${status} ${student.attendance === status ? "active" : ""}`} onClick={() => onMark(student, status)}>{status === "present" ? <UserCheck /> : status === "absent" ? <UserX /> : status === "late" ? <Clock3 /> : <ShieldCheck />}<span>{attendanceLabel[status]}</span></button>)}
+  </div>;
+}
+
 export default function TeacherApp() {
   const [data, setStore] = useState<AppData>(initialData);
   const [hydrated, setHydrated] = useState(false);
@@ -164,11 +194,26 @@ export default function TeacherApp() {
   const [activeClassId, setActiveClassId] = useState("c8a2");
   const [mobileNav, setMobileNav] = useState(false);
   useEffect(() => {
-    try { const saved = localStorage.getItem(storageKey); if (saved) setStore(normalizeData(JSON.parse(saved) as Partial<AppData>)); }
-    catch { toast.error("Không thể đọc dữ liệu đã lưu trên trình duyệt."); }
-    finally { setHydrated(true); }
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) setStore(normalizeData(JSON.parse(saved) as Partial<AppData>));
+      } catch {
+        toast.error("Không thể đọc dữ liệu đã lưu trên trình duyệt.");
+      } finally {
+        setHydrated(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
-  useEffect(() => { if (hydrated) localStorage.setItem(storageKey, JSON.stringify(data)); }, [data, hydrated]);
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(data));
+    } catch {
+      toast.error("Bộ nhớ trình duyệt đã đầy. Hãy tải bản sao lưu trong Thiết lập.");
+    }
+  }, [data, hydrated]);
   const setData: DataSetter = (next, action) => setStore((previous) => ({
     ...next,
     auditLog: [{ id: `log${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, at: new Date().toISOString(), action: action ?? describeChange(previous, next) }, ...(next.auditLog ?? previous.auditLog ?? [])].slice(0, 80),
@@ -179,45 +224,71 @@ export default function TeacherApp() {
     setPage(key as PageKey); setMobileNav(false); window.scrollTo({ top: 0, behavior: "smooth" });
   };
   if (!activeClass) return null;
+  const currentNavItem = navItems.find(([key]) => key === page) ?? navItems[0];
+  const CurrentPageIcon = currentNavItem[2];
   return <div className="app-shell">
-    <header className="topbar">
-      <div className="topbar-main">
+    <aside className={mobileNav ? "side-panel is-open" : "side-panel"}>
+      <div className="side-panel-head">
         <button className="brand" onClick={() => navigate("dashboard")} aria-label="Về trang tổng quan">
           <span className="brand-mark"><BookOpenCheck /></span>
-          <span className="brand-copy"><strong>SỔ TAY BỘ MÔN</strong><small>GV: {data.teacherName || "Mai Hoa"}{data.schoolName ? ` · ${data.schoolName}` : ""} · {data.subject || "Địa lý"}</small></span>
-          <span className="edition">QUẢN LÝ 4.0</span>
+          <span className="brand-copy"><strong>SỔ TAY BỘ MÔN</strong><small>Không gian làm việc giáo viên</small></span>
         </button>
-        <div className="context-bar">
-          <Select value={data.schoolYear} onValueChange={(value) => setData({ ...data, schoolYear: value })}>
-            <SelectTrigger className="context-select"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="2025–2026">Năm 2025–2026</SelectItem><SelectItem value="2026–2027">Năm 2026–2027</SelectItem></SelectContent>
-          </Select>
-          <Select value={data.semester} onValueChange={(value) => setData({ ...data, semester: value })}>
-            <SelectTrigger className="context-select semester"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Học kỳ I">Học kỳ I</SelectItem><SelectItem value="Học kỳ II">Học kỳ II</SelectItem></SelectContent>
-          </Select>
-          <Select value={activeClassId} onValueChange={setActiveClassId}>
-            <SelectTrigger className="context-select class-picker"><span className="select-prefix">Lớp</span><SelectValue /></SelectTrigger><SelectContent>{data.classes.map((item) => <SelectItem value={item.id} key={item.id}>{item.name} · Khối {item.grade}</SelectItem>)}</SelectContent>
-          </Select>
-          <Button className="purple-action" onClick={() => navigate("assistant")}><Sparkles /> Trợ lý AI</Button>
-          <Button className="start-action" onClick={() => setPage("lesson")}><Clock3 /> Bắt đầu tiết học</Button>
-        </div>
-        <Button className="mobile-menu" size="icon" variant="ghost" onClick={() => setMobileNav(!mobileNav)} aria-label="Mở điều hướng">{mobileNav ? <X /> : <ListChecks />}</Button>
+        <Button className="side-close" size="icon" variant="ghost" onClick={() => setMobileNav(false)} aria-label="Đóng điều hướng"><X /></Button>
       </div>
-      <nav className={mobileNav ? "main-nav is-open" : "main-nav"} aria-label="Điều hướng chính">
-        {navItems.map(([key,label,Icon]) => <button key={key} className={page === key ? "active" : ""} onClick={() => navigate(key)}><Icon /><span>{label}</span></button>)}
+      <div className="teacher-card">
+        <span className="teacher-avatar">{(data.teacherName || "M").trim().split(" ").at(-1)?.[0]}</span>
+        <div><strong>{data.teacherName || "Mai Hoa"}</strong><small>{data.subject || "Địa lý"}{data.schoolName ? ` · ${data.schoolName}` : ""}</small></div>
+        <span className="edition">4.0</span>
+      </div>
+      <nav className="main-nav" aria-label="Điều hướng chính">
+        {navItems.map(([key,label,Icon]) => <button key={key} className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => navigate(key)}><Icon /><span>{label}</span></button>)}
       </nav>
-    </header>
-    <main className="page-wrap">
-      {page === "dashboard" && <Dashboard data={data} setData={setData} activeClass={activeClass} setActiveClassId={setActiveClassId} navigate={navigate} />}
-      {page === "schedule" && <SchedulePage data={data} setData={setData} activeClassId={activeClassId} />}
-      {page === "lesson" && <LessonPage data={data} setData={setData} classroom={activeClass} students={activeStudents} />}
-      {page === "grades" && <GradesPage data={data} setData={setData} classroom={activeClass} students={activeStudents} />}
-      {page === "classes" && <ClassesPage data={data} setData={setData} setActiveClassId={setActiveClassId} navigate={navigate} />}
-      {page === "profiles" && <ProfilesPage data={data} students={activeStudents} classroom={activeClass} navigate={navigate} />}
-      {page === "report" && <ReportsPage data={data} classroom={activeClass} students={activeStudents} navigate={navigate} />}
-      {page === "assistant" && <AssistantPage data={data} setData={setData} classroom={activeClass} students={activeStudents} />}
-      {page === "settings" && <SettingsPage data={data} setData={setData} />}
-    </main>
+      <div className="mobile-context-panel">
+        <span>Ngữ cảnh làm việc</span>
+        <ContextControls data={data} setData={setData} activeClassId={activeClass.id} setActiveClassId={setActiveClassId} />
+      </div>
+      <div className="side-panel-meta"><ShieldCheck /><div><strong>Dữ liệu riêng tư</strong><small>{hydrated ? "Đã lưu trên thiết bị này" : "Đang tải dữ liệu..."}</small></div></div>
+    </aside>
+    {mobileNav && <button className="nav-backdrop" onClick={() => setMobileNav(false)} aria-label="Đóng điều hướng" />}
+    <div className="workspace-shell">
+      <header className="topbar">
+        <Button className="mobile-menu" size="icon" variant="ghost" onClick={() => setMobileNav((current) => !current)} aria-label="Mở điều hướng" aria-expanded={mobileNav}><ListChecks /></Button>
+        <div className="workspace-heading"><span><CurrentPageIcon /> {currentNavItem[1]}</span><small>{activeClass.name} · {data.semester}</small></div>
+        <div className="context-bar">
+          <ContextControls data={data} setData={setData} activeClassId={activeClass.id} setActiveClassId={setActiveClassId} />
+          <Button className="purple-action" onClick={() => navigate("assistant")}><Sparkles /> Trợ lý AI</Button>
+          <Button className="start-action" onClick={() => navigate("lesson")}><Clock3 /> Bắt đầu tiết học</Button>
+        </div>
+      </header>
+      <main className="page-wrap">
+        {page === "dashboard" && <Dashboard data={data} setData={setData} activeClass={activeClass} setActiveClassId={setActiveClassId} navigate={navigate} />}
+        {page === "schedule" && <SchedulePage data={data} setData={setData} activeClassId={activeClass.id} />}
+        {page === "lesson" && <LessonPage key={activeClass.id} data={data} setData={setData} classroom={activeClass} students={activeStudents} />}
+        {page === "grades" && <GradesPage data={data} setData={setData} classroom={activeClass} students={activeStudents} />}
+        {page === "classes" && <ClassesPage data={data} setData={setData} setActiveClassId={setActiveClassId} navigate={navigate} />}
+        {page === "profiles" && <ProfilesPage key={activeClass.id} data={data} students={activeStudents} classroom={activeClass} navigate={navigate} />}
+        {page === "report" && <ReportsPage data={data} classroom={activeClass} students={activeStudents} navigate={navigate} />}
+        {page === "assistant" && <AssistantPage key={activeClass.id} data={data} setData={setData} classroom={activeClass} students={activeStudents} />}
+        {page === "settings" && <SettingsPage data={data} setData={setData} />}
+      </main>
+    </div>
     <Toaster position="bottom-right" richColors />
+  </div>;
+}
+
+function ContextControls({ data, setData, activeClassId, setActiveClassId }: {
+  data: AppData; setData: DataSetter; activeClassId: string; setActiveClassId: (id: string) => void;
+}) {
+  return <div className="context-controls">
+    <Select value={data.schoolYear} onValueChange={(value) => setData({ ...data, schoolYear: value })}>
+      <SelectTrigger className="context-select school-year"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="2025–2026">Năm 2025–2026</SelectItem><SelectItem value="2026–2027">Năm 2026–2027</SelectItem></SelectContent>
+    </Select>
+    <Select value={data.semester} onValueChange={(value) => setData({ ...data, semester: value })}>
+      <SelectTrigger className="context-select semester"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Học kỳ I">Học kỳ I</SelectItem><SelectItem value="Học kỳ II">Học kỳ II</SelectItem></SelectContent>
+    </Select>
+    <Select value={activeClassId} onValueChange={setActiveClassId}>
+      <SelectTrigger className="context-select class-picker"><span className="select-prefix">Lớp</span><SelectValue /></SelectTrigger><SelectContent>{data.classes.map((item) => <SelectItem value={item.id} key={item.id}>{item.name} · Khối {item.grade}</SelectItem>)}</SelectContent>
+    </Select>
   </div>;
 }
 
@@ -228,27 +299,59 @@ function Dashboard({ data, setData, activeClass, setActiveClassId, navigate }: {
   const [grade, setGrade] = useState<number | "all">("all");
   const [classOpen, setClassOpen] = useState(false);
   const [newClass, setNewClass] = useState({ grade: "8", name: "" });
+  const [studentQuery, setStudentQuery] = useState("");
   const filtered = grade === "all" ? data.classes : data.classes.filter((item) => item.grade === grade);
-  const topStudents = data.students.filter((item) => item.praise >= 2).length;
-  const activeStudents = data.students.filter((item) => item.activity >= 7).length;
+  const availableGrades = [...new Set(data.classes.map((item) => item.grade))].sort((a, b) => a - b);
+  const classStudents = data.students.filter((item) => item.classId === activeClass.id);
+  const classSchedule = data.schedule.filter((item) => item.classId === activeClass.id);
+  const weeklySchedule = [...data.schedule].sort((a, b) => a.day - b.day || a.period - b.period).slice(0, 5);
+  const studentRows = classStudents.map((student) => ({ student, avg: average(student, data.scoreWeights) }));
+  const gradedRows = studentRows.filter((item): item is typeof item & { avg: number } => typeof item.avg === "number");
+  const classAverage = gradedRows.length ? gradedRows.reduce((sum, item) => sum + item.avg, 0) / gradedRows.length : null;
+  const meetingTarget = gradedRows.filter((item) => item.avg >= 6.5).length;
+  const needsAttention = studentRows.filter(({ student, avg }) => student.attendance === "absent" || student.attendance === "late" || (avg !== null && avg < 6.5) || student.activity < 3);
+  const visibleStudentRows = studentRows.filter(({ student }) => student.name.toLocaleLowerCase("vi").includes(studentQuery.trim().toLocaleLowerCase("vi")));
   const createClass = () => {
     if (!newClass.name.trim()) return toast.error("Vui lòng nhập tên lớp.");
-    const classroom: Classroom = { id: `c${Date.now()}`, name: newClass.name.trim().startsWith("Lớp") ? newClass.name.trim() : `Lớp ${newClass.name.trim()}`, grade: Number(newClass.grade), room: `Phòng ${newClass.name.trim()}`, studentIds: [] };
+    const cleanName = newClass.name.trim().replace(/\s+/g, " ");
+    const displayName = /^lớp\s/i.test(cleanName) ? cleanName : `Lớp ${cleanName}`;
+    if (data.classes.some((item) => item.name.toLocaleLowerCase("vi") === displayName.toLocaleLowerCase("vi"))) return toast.error("Lớp học này đã tồn tại.");
+    const classroom: Classroom = { id: `c${Date.now()}`, name: displayName, grade: Number(newClass.grade), room: `Phòng ${cleanName}`, studentIds: [] };
     setData({ ...data, classes: [...data.classes, classroom] }); setNewClass({ grade: "8", name: "" }); setClassOpen(false); toast.success("Đã thêm lớp học mới.");
   };
   return <div className="stack-xl">
     <section className="hero-panel">
-      <div><span className="eyebrow"><CalendarDays /> {data.semester} · Năm học {data.schoolYear}</span><h1>SỔ TAY BỘ MÔN 360 · BÀN LÀM VIỆC GIÁO VIÊN</h1><p>Theo sát từng lớp học, từng học sinh và từng tiết dạy trong một không gian thống nhất.</p></div>
+      <div className="hero-copy"><span className="eyebrow"><CalendarDays /> {data.semester} · Năm học {data.schoolYear}</span><h1>Xin chào {data.teacherName || "thầy/cô"}!</h1><p>Mọi lớp học, tiết dạy và tiến bộ của học sinh được sắp xếp rõ ràng trong một không gian làm việc.</p><div className="hero-note"><BookOpenCheck /><span><strong>Sẵn sàng cho tiết dạy tiếp theo</strong>Dữ liệu được tự động lưu trên thiết bị này.</span></div></div>
       <div className="hero-current"><small>Lớp đang chọn</small><strong>{activeClass.name} <span>(Khối {activeClass.grade})</span></strong><p>{data.subject} · {activeClass.room}</p><Button onClick={() => navigate("lesson")}><Clock3 /> Bắt đầu tiết học ngay</Button></div>
     </section>
     <section className="metric-grid">
-      <Metric icon={<AlertTriangle />} tone="amber" value={`${data.students.length} học sinh`} label="Tổng số học sinh đang theo dõi" action="Mở hồ sơ học sinh" onClick={() => navigate("profiles")} />
-      <Metric icon={<UsersRound />} tone="blue" value={`${activeStudents} học sinh`} label="Đang có hoạt động tích cực" action="Xem theo dõi trong giờ" onClick={() => navigate("lesson")} />
-      <Metric icon={<Medal />} tone="green" value={`${topStudents} học sinh`} label="Có thành tích nổi bật" action="Xem danh sách tuyên dương" onClick={() => navigate("profiles")} />
-      <Metric icon={<Clock3 />} tone="purple" value={`${data.schedule.length} tiết`} label="Đã thiết lập trong tuần" action="Điền thời khóa biểu" onClick={() => navigate("schedule")} />
+      <Metric icon={<UsersRound />} tone="green" value={`${classStudents.length} học sinh`} label={`Sĩ số ${activeClass.name}`} action="Mở hồ sơ học sinh" onClick={() => navigate("profiles")} />
+      <Metric icon={<Check />} tone="blue" value={`${meetingTarget}/${gradedRows.length || classStudents.length}`} label="Học sinh đạt từ 6,5" action="Mở sổ điểm" onClick={() => navigate("grades")} />
+      <Metric icon={<AlertTriangle />} tone="amber" value={`${needsAttention.length} học sinh`} label="Cần giáo viên chú ý" action="Xem báo cáo chi tiết" onClick={() => navigate("report")} />
+      <Metric icon={<Medal />} tone="purple" value={classAverage?.toFixed(1) ?? "—"} label="Điểm trung bình lớp" action="Xem tiến bộ học tập" onClick={() => navigate("report")} />
+    </section>
+    <section className="command-center-grid">
+      <article className="surface active-class-panel">
+        <div className="card-heading"><div><h2><BookOpenCheck /> Lớp đang chọn</h2><p>Ngữ cảnh thao tác hiện tại</p></div><span className="live-badge">ĐANG DẠY</span></div>
+        <div className="active-class-identity"><strong>{activeClass.name.replace("Lớp ", "")}</strong><span>Khối {activeClass.grade}</span></div>
+        <dl className="active-class-facts"><div><dt>Học sinh</dt><dd>{classStudents.length}</dd></div><div><dt>Môn phụ trách</dt><dd>{data.subject}</dd></div><div><dt>Phòng học</dt><dd>{activeClass.room}</dd></div><div><dt>Tiết trong tuần</dt><dd>{classSchedule.length}</dd></div></dl>
+        <div className="active-class-actions"><Button onClick={() => navigate("lesson")}><UserCheck /> Điểm danh</Button><Button variant="outline" onClick={() => navigate("grades")}><Table2 /> Nhập điểm</Button></div>
+      </article>
+      <article className="surface schedule-preview">
+        <div className="card-heading"><div><h2><CalendarDays /> Lịch dạy trong tuần</h2><p>{data.schedule.length} tiết đã được thiết lập</p></div><Button variant="ghost" onClick={() => navigate("schedule")}>Xem thời khóa biểu <ChevronRight /></Button></div>
+        <div className="schedule-preview-list">{weeklySchedule.map((entry) => { const classroom = data.classes.find((item) => item.id === entry.classId); return <button key={entry.id} className={entry.classId === activeClass.id ? "active" : ""} onClick={() => { setActiveClassId(entry.classId); navigate("lesson"); }}><span className="schedule-day">T{entry.day}<small>Tiết {entry.period}</small></span><span><strong>{classroom?.name ?? "Lớp học"}</strong><small>{entry.note}</small></span><span className="schedule-room">{entry.room}<ChevronRight /></span></button>; })}{!weeklySchedule.length && <div className="compact-empty"><CalendarDays /> Chưa có tiết dạy. Hãy mở Thời khóa biểu để thiết lập.</div>}</div>
+      </article>
+      <article className="surface dashboard-attention-panel">
+        <div className="card-heading"><div><h2><AlertTriangle /> Học sinh cần chú ý</h2><p>Cảnh báo từ dữ liệu hiện có</p></div><Button variant="ghost" onClick={() => navigate("report")}>Xem tất cả <ChevronRight /></Button></div>
+        <div className="dashboard-attention-list">{needsAttention.slice(0, 5).map(({ student, avg }) => <button key={student.id} onClick={() => navigate("profiles")}><span>{student.name.split(" ").at(-1)?.[0]}</span><span><strong>{student.name}</strong><small>{student.attendance !== "present" ? attendanceLabel[student.attendance] : avg !== null && avg < 6.5 ? `ĐTB ${avg.toFixed(1)}` : "Ít tương tác trong lớp"}</small></span><ChevronRight /></button>)}{!needsAttention.length && <div className="compact-empty"><Check /> Chưa có cảnh báo cần xử lý.</div>}</div>
+      </article>
+    </section>
+    <section className="surface dashboard-student-card">
+      <div className="card-heading"><div><h2><UsersRound /> Danh sách học sinh {activeClass.name}</h2><p>Dữ liệu điểm danh, điểm số và hoạt động mới nhất</p></div><label className="dashboard-student-search"><Search /><input aria-label="Tìm học sinh trong lớp đang chọn" value={studentQuery} onChange={(event) => setStudentQuery(event.target.value)} placeholder="Tìm học sinh..." /></label></div>
+      <div className="dashboard-table-wrap"><table className="dashboard-student-table"><thead><tr><th>STT</th><th>Họ và tên</th><th>Điểm danh</th><th>ĐTB</th><th>Hoạt động</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{visibleStudentRows.map(({ student, avg }, index) => { const attention = needsAttention.some((item) => item.student.id === student.id); return <tr key={student.id}><td>{index + 1}</td><td><strong>{student.name}</strong><small>{student.gender} · {activeClass.name}</small></td><td><span className={`attendance-badge ${student.attendance}`}>{attendanceLabel[student.attendance]}</span></td><td><b>{avg?.toFixed(1) ?? "—"}</b></td><td>{student.activity > 0 ? "+" : ""}{student.activity}đ</td><td><span className={`student-status ${attention ? "attention" : "steady"}`}>{attention ? "Cần chú ý" : "Ổn định"}</span></td><td><Button size="icon-sm" variant="ghost" aria-label={`Mở hồ sơ ${student.name}`} onClick={() => navigate("profiles")}><ChevronRight /></Button></td></tr>; })}</tbody></table>{!visibleStudentRows.length && <div className="compact-empty"><Search /> Không tìm thấy học sinh phù hợp.</div>}</div>
     </section>
     <section className="surface class-section">
-      <div className="section-toolbar"><div><h2><UsersRound /> Danh sách các Khối & Lớp đang giảng dạy</h2><p>Chọn lớp để theo dõi lịch học, học sinh và sổ điểm.</p></div><div className="toolbar-actions"><div className="chip-row"><button className={grade === "all" ? "chip active" : "chip"} onClick={() => setGrade("all")}>Tất cả</button>{[6,7,8,9,10,11,12].map((item) => <button key={item} className={grade === item ? "chip active" : "chip"} onClick={() => setGrade(item)}>Khối {item}</button>)}</div><Button onClick={() => setClassOpen(true)}><Plus /> Thêm lớp</Button></div></div>
+      <div className="section-toolbar"><div><h2><UsersRound /> Các lớp đang giảng dạy</h2><p>Chọn lớp để theo dõi lịch học, học sinh và sổ điểm.</p></div><div className="toolbar-actions"><div className="chip-row"><button aria-pressed={grade === "all"} className={grade === "all" ? "chip active" : "chip"} onClick={() => setGrade("all")}>Tất cả</button>{availableGrades.map((item) => <button aria-pressed={grade === item} key={item} className={grade === item ? "chip active" : "chip"} onClick={() => setGrade(item)}>Khối {item}</button>)}</div><Button onClick={() => setClassOpen(true)}><Plus /> Thêm lớp</Button></div></div>
       <div className="class-grid">{filtered.map((item) => <ClassCard key={item.id} item={item} data={data} selected={activeClass.id === item.id} teach={() => { setActiveClassId(item.id); navigate("lesson"); }} manage={() => { setActiveClassId(item.id); navigate("classes"); }} />)}</div>
     </section>
     <Dialog open={classOpen} onOpenChange={setClassOpen}><DialogContent><DialogHeader><DialogTitle className="dialog-title"><UsersRound /> Thêm lớp học mới</DialogTitle><DialogDescription>Năm học {data.schoolYear}</DialogDescription></DialogHeader><div className="form-stack"><label>Chọn khối<Select value={newClass.grade} onValueChange={(value) => setNewClass({ ...newClass, grade: value })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent>{[6,7,8,9,10,11,12].map((item) => <SelectItem value={String(item)} key={item}>Khối {item}</SelectItem>)}</SelectContent></Select></label><label>Tên lớp<input value={newClass.name} onChange={(event) => setNewClass({ ...newClass, name: event.target.value })} placeholder="Ví dụ: 8A2, 11B6..." /></label></div><DialogFooter><Button variant="ghost" onClick={() => setClassOpen(false)}>Hủy</Button><Button onClick={createClass}><Plus /> Tạo lớp</Button></DialogFooter></DialogContent></Dialog>
@@ -276,9 +379,9 @@ function SchedulePage({ data, setData, activeClassId }: { data: AppData; setData
   };
   const remove = () => { if (!editing?.id) return; setData({ ...data, schedule: data.schedule.filter((item) => item.id !== editing.id) }); setEditing(null); toast.success("Đã xóa tiết khỏi thời khóa biểu."); };
   return <div className="stack-xl">
-    <section className="week-panel"><div className="week-head"><div><small>NĂM HỌC {data.schoolYear}</small><h1>TUẦN {week} / 38</h1></div><div className="week-nav"><Button size="icon" variant="ghost" onClick={() => setWeek(Math.max(1, week - 1))}><ChevronLeft /></Button><span>Tuần {week} (hiện tại)</span><Button size="icon" variant="ghost" onClick={() => setWeek(Math.min(38, week + 1))}><ChevronRight /></Button></div></div><div className="week-chips">{Array.from({ length: 12 }, (_, index) => index + 1).map((item) => <button className={week === item ? "active" : ""} onClick={() => setWeek(item)} key={item}>T{item}</button>)}</div></section>
+    <section className="week-panel"><div className="week-head"><div><small>NĂM HỌC {data.schoolYear}</small><h1>TUẦN {week} / 38</h1></div><div className="week-nav"><Button size="icon" variant="ghost" aria-label="Tuần trước" onClick={() => setWeek(Math.max(1, week - 1))}><ChevronLeft /></Button><span>Đang xem tuần {week}</span><Button size="icon" variant="ghost" aria-label="Tuần sau" onClick={() => setWeek(Math.min(38, week + 1))}><ChevronRight /></Button></div></div><div className="week-chips" aria-label="Chọn tuần">{Array.from({ length: 38 }, (_, index) => index + 1).map((item) => <button aria-pressed={week === item} className={week === item ? "active" : ""} onClick={() => setWeek(item)} key={item}>T{item}</button>)}</div></section>
     <section className="surface schedule-surface"><div className="schedule-grid"><div className="schedule-header corner">BUỔI / TIẾT</div>{days.map((day) => <div key={day} className="schedule-header">THỨ {day}</div>)}{periods.map((period) => <div className="schedule-row" key={period}><div className="period-label"><span>{period <= 3 ? "BUỔI SÁNG" : "BUỔI CHIỀU"}</span>TIẾT {period}</div>{days.map((day) => { const entry = data.schedule.find((item) => item.day === day && item.period === period); const classroom = data.classes.find((item) => item.id === entry?.classId); return <button key={day} className={entry ? "schedule-cell filled" : "schedule-cell"} onClick={() => openSlot(day, period)}>{entry ? <><span className="schedule-class">{classroom?.name}</span><strong>{data.subject}</strong><small>{entry.room}</small><Pencil /></> : <Plus />}</button>; })}</div>)}</div></section>
-    <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}><DialogContent><DialogHeader><DialogTitle className="dialog-title"><CalendarDays /> Thiết lập tiết dạy · Thứ {editing?.day}</DialogTitle><DialogDescription>Sáng · Tiết {editing?.period}</DialogDescription></DialogHeader><div className="form-stack"><label>Chọn lớp học<Select value={editing?.classId} onValueChange={(value) => setEditing({ ...editing, classId: value })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent>{data.classes.map((item) => <SelectItem value={item.id} key={item.id}>{item.name} · Khối {item.grade}</SelectItem>)}</SelectContent></Select></label><label>Môn giảng dạy<input value={data.subject} readOnly /></label><label>Phòng học<input value={editing?.room ?? ""} onChange={(event) => setEditing({ ...editing, room: event.target.value })} placeholder="Nhập phòng học" /></label><label>Ghi chú tiết học<input value={editing?.note ?? ""} onChange={(event) => setEditing({ ...editing, note: event.target.value })} placeholder="Nội dung bài học, dặn dò..." /></label></div><DialogFooter>{editing?.id && <Button variant="destructive" onClick={remove}>Xóa tiết</Button>}<Button variant="ghost" onClick={() => setEditing(null)}>Hủy</Button><Button className="purple-action" onClick={save}><Save /> Lưu tiết dạy</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}><DialogContent><DialogHeader><DialogTitle className="dialog-title"><CalendarDays /> Thiết lập tiết dạy · Thứ {editing?.day}</DialogTitle><DialogDescription>{(editing?.period ?? 1) <= 3 ? "Buổi sáng" : "Buổi chiều"} · Tiết {editing?.period}</DialogDescription></DialogHeader><div className="form-stack"><label>Chọn lớp học<Select value={editing?.classId} onValueChange={(value) => setEditing({ ...editing, classId: value })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent>{data.classes.map((item) => <SelectItem value={item.id} key={item.id}>{item.name} · Khối {item.grade}</SelectItem>)}</SelectContent></Select></label><label>Môn giảng dạy<input value={data.subject} readOnly /></label><label>Phòng học<input value={editing?.room ?? ""} onChange={(event) => setEditing({ ...editing, room: event.target.value })} placeholder="Nhập phòng học" /></label><label>Ghi chú tiết học<input value={editing?.note ?? ""} onChange={(event) => setEditing({ ...editing, note: event.target.value })} placeholder="Nội dung bài học, dặn dò..." /></label></div><DialogFooter>{editing?.id && <AlertDialog><AlertDialogTrigger asChild><Button variant="destructive">Xóa tiết</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Xóa tiết khỏi thời khóa biểu?</AlertDialogTitle><AlertDialogDescription>Thứ {editing.day} · Tiết {editing.period} sẽ bị xóa khỏi lịch dạy trên thiết bị này.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Hủy</AlertDialogCancel><AlertDialogAction className="danger-confirm" onClick={remove}>Xác nhận xóa</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>}<Button variant="ghost" onClick={() => setEditing(null)}>Hủy</Button><Button className="purple-action" onClick={save}><Save /> Lưu tiết dạy</Button></DialogFooter></DialogContent></Dialog>
   </div>;
 }
 
@@ -289,6 +392,7 @@ function LessonPage({ data, setData, classroom, students }: { data: AppData; set
   const [lessonName, setLessonName] = useState("Tiết 14 · Ôn tập và luyện tập bản đồ");
   const [lessonDate, setLessonDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [history, setHistory] = useState<{ studentId: string; previous: Student }[]>([]);
+  const [noteDraft, setNoteDraft] = useState<{ studentId: string; value: string } | null>(null);
   const shown = students.filter((item) => item.name.toLowerCase().includes(query.toLowerCase()));
   const playChime = (points: number) => {
     if (!sound || typeof window === "undefined") return;
@@ -320,7 +424,7 @@ function LessonPage({ data, setData, classroom, students }: { data: AppData; set
   };
   const reward = (student: Student, field: "hand" | "correct" | "praise" | "activity", points: number, message: string) => {
     playChime(points);
-    setHistory([...history, { studentId: student.id, previous: { ...student, scores: { ...student.scores } } }]);
+    setHistory((current) => [...current, { studentId: student.id, previous: { ...student, scores: { ...student.scores } } }]);
     setData({ ...data, students: data.students.map((item) => item.id === student.id ? { ...item, [field]: Math.max(0, item[field] + 1), activity: Math.max(0, item.activity + points) } : item) });
     toast.success(`${student.name}: ${message} (${points > 0 ? "+" : ""}${points}đ)`);
   };
@@ -328,17 +432,22 @@ function LessonPage({ data, setData, classroom, students }: { data: AppData; set
     const last = history.at(-1);
     if (!last) return toast.info("Chưa có thao tác để hoàn tác.");
     setData({ ...data, students: data.students.map((item) => item.id === last.studentId ? last.previous : item) });
-    setHistory(history.slice(0, -1)); toast.success("Đã hoàn tác ghi nhận gần nhất.");
+    setHistory((current) => current.slice(0, -1)); toast.success("Đã hoàn tác ghi nhận gần nhất.");
   };
   const markAttendance = (student: Student, attendance: AttendanceStatus) => {
     if (student.attendance === attendance) return;
-    setHistory([...history, { studentId: student.id, previous: { ...student, scores: { ...student.scores } } }]);
+    setHistory((current) => [...current, { studentId: student.id, previous: { ...student, scores: { ...student.scores } } }]);
     setData({ ...data, students: data.students.map((item) => item.id === student.id ? { ...item, attendance } : item) });
   };
+  const saveNote = () => {
+    if (!noteDraft) return;
+    const selectedStudent = data.students.find((item) => item.id === noteDraft.studentId);
+    if (!selectedStudent) return;
+    setData({ ...data, students: data.students.map((item) => item.id === noteDraft.studentId ? { ...item, note: noteDraft.value.trim() } : item) });
+    setNoteDraft(null);
+    toast.success(`Đã lưu nhận xét cho ${selectedStudent.name}.`);
+  };
   const attendanceCounts = (Object.keys(attendanceLabel) as AttendanceStatus[]).map((status) => ({ status, count: students.filter((student) => student.attendance === status).length }));
-  const AttendanceButtons = ({ student }: { student: Student }) => <div className="attendance-actions" aria-label={`Điểm danh ${student.name}`}>
-    {(Object.keys(attendanceLabel) as AttendanceStatus[]).map((status) => <button key={status} title={attendanceLabel[status]} aria-label={attendanceLabel[status]} className={`${status} ${student.attendance === status ? "active" : ""}`} onClick={() => markAttendance(student, status)}>{status === "present" ? <UserCheck /> : status === "absent" ? <UserX /> : status === "late" ? <Clock3 /> : <ShieldCheck />}<span>{attendanceLabel[status]}</span></button>)}
-  </div>;
   return <div className="stack-lg">
     <section className="surface lesson-head">
       <div className="section-toolbar"><div><h1>THEO DÕI TIẾT HỌC {classroom.name.toUpperCase()} <span>KHỐI {classroom.grade}</span></h1><p>Ghi nhận nhanh mức độ tham gia và kết quả của từng học sinh trong giờ học.</p></div><div className="lesson-actions"><div className="sound-toggle"><Megaphone /><Switch checked={sound} onCheckedChange={setSound} aria-label="Bật âm thanh" /></div><Button className="undo-action" onClick={undo}><RotateCcw /> Hoàn tác</Button><Button className="purple-soft" onClick={() => toast.info("Quy đổi điểm đang áp dụng theo hệ số trong Thiết lập.")}><Settings2 /> Quy đổi sang điểm môn</Button><Button className="dark-action" onClick={() => toast.success("Đã kết thúc và lưu tiết học.")}><Check /> Kết thúc tiết học</Button></div></div>
@@ -347,8 +456,9 @@ function LessonPage({ data, setData, classroom, students }: { data: AppData; set
     <div className="notice"><AlertTriangle /><p><strong>Nguyên tắc quan trọng:</strong> điểm hoạt động hỗ trợ đánh giá quá trình. Giáo viên cần đối chiếu minh chứng trước khi quy đổi sang điểm môn học.</p></div>
     <section className="attendance-strip surface"><div><span className="eyebrow green"><ClipboardCheck /> ĐIỂM DANH NHANH</span><h2>{students.length} học sinh · {classroom.name}</h2></div><div className="attendance-summary">{attendanceCounts.map(({ status, count }) => <span className={status} key={status}><i />{attendanceLabel[status]} <strong>{count}</strong></span>)}</div></section>
     <section className="lesson-tools"><label className="search-box"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm theo tên học sinh hoặc STT..." /></label><Button variant={quickMode ? "default" : "outline"} onClick={() => setQuickMode(!quickMode)}><Smartphone /> {quickMode ? "Đang ở chế độ nhanh" : "Chế độ nhanh mobile"}</Button><Button variant="outline" onClick={() => toast.info("Danh sách hiện được thao tác theo từng học sinh.")}><UsersRound /> {shown.length} học sinh</Button></section>
-    {!quickMode ? <section className="student-action-grid">{shown.map((student, index) => <article key={student.id} className="student-action-card"><div className="student-card-head"><span className="student-index">{index + 1}</span><div><h3>{student.name}</h3><p>STT {index + 1} · {student.gender}</p></div><strong>+{student.activity}đ<small>hoạt động</small></strong></div><AttendanceButtons student={student} /><div className="behavior-grid"><button className="yellow" onClick={() => reward(student, "hand", 1, "Giơ tay phát biểu")}><Hand />Giơ tay phát biểu</button><button className="green" onClick={() => reward(student, "correct", 1, "Trả lời đúng")}><Check />Trả lời đúng</button><button className="purple" onClick={() => reward(student, "praise", 2, "Trả lời xuất sắc")}><Star />Trả lời xuất sắc</button><button className="blue" onClick={() => reward(student, "activity", 1, "Hỗ trợ hoạt động")}><ThumbsUp />Hỗ trợ hoạt động</button><button className="mint" onClick={() => reward(student, "activity", 1, "Chuẩn bị bài tốt")}><ClipboardCheck />Chuẩn bị bài tốt</button><button className="rose" onClick={() => reward(student, "activity", -1, "Cần nhắc nhở")}><AlertTriangle />Cần nhắc nhở</button></div><button className="note-button" onClick={() => toast.info(`Ghi chú hiện tại: ${student.note || "Chưa có ghi chú"}`)}><Pencil /> Thêm nhận xét / Tệp minh chứng</button></article>)}</section> : <section className="quick-roster surface">{shown.map((student, index) => <article className="quick-row" key={student.id}><span className="student-index">{index + 1}</span><div className="quick-name"><strong>{student.name}</strong><small>{student.gender} · <b className={student.attendance}>{attendanceLabel[student.attendance]}</b></small></div><AttendanceButtons student={student} /><div className="quick-actions"><button className="reward" onClick={() => reward(student, "hand", 1, "Phát biểu tích cực")}><Hand /> +1</button><button className="remind" onClick={() => reward(student, "activity", -1, "Cần nhắc nhở")}><AlertTriangle /> -1</button></div><strong className="quick-score">{student.activity > 0 ? "+" : ""}{student.activity}đ</strong></article>)}</section>}
+    {!quickMode ? <section className="student-action-grid">{shown.map((student, index) => <article key={student.id} className="student-action-card"><div className="student-card-head"><span className="student-index">{index + 1}</span><div><h3>{student.name}</h3><p>STT {index + 1} · {student.gender}</p></div><strong>{student.activity > 0 ? "+" : ""}{student.activity}đ<small>hoạt động</small></strong></div><AttendanceButtons student={student} onMark={markAttendance} /><div className="behavior-grid"><button className="yellow" onClick={() => reward(student, "hand", 1, "Giơ tay phát biểu")}><Hand />Giơ tay phát biểu</button><button className="green" onClick={() => reward(student, "correct", 1, "Trả lời đúng")}><Check />Trả lời đúng</button><button className="purple" onClick={() => reward(student, "praise", 2, "Trả lời xuất sắc")}><Star />Trả lời xuất sắc</button><button className="blue" onClick={() => reward(student, "activity", 1, "Hỗ trợ hoạt động")}><ThumbsUp />Hỗ trợ hoạt động</button><button className="mint" onClick={() => reward(student, "activity", 1, "Chuẩn bị bài tốt")}><ClipboardCheck />Chuẩn bị bài tốt</button><button className="rose" onClick={() => reward(student, "activity", -1, "Cần nhắc nhở")}><AlertTriangle />Cần nhắc nhở</button></div><button className="note-button" onClick={() => setNoteDraft({ studentId: student.id, value: student.note })}><Pencil /> Ghi nhận xét nhanh</button></article>)}</section> : <section className="quick-roster surface">{shown.map((student, index) => <article className="quick-row" key={student.id}><span className="student-index">{index + 1}</span><div className="quick-name"><strong>{student.name}</strong><small>{student.gender} · <b className={student.attendance}>{attendanceLabel[student.attendance]}</b></small></div><AttendanceButtons student={student} onMark={markAttendance} /><div className="quick-actions"><button className="reward" onClick={() => reward(student, "hand", 1, "Phát biểu tích cực")}><Hand /> +1</button><button className="remind" onClick={() => reward(student, "activity", -1, "Cần nhắc nhở")}><AlertTriangle /> -1</button></div><strong className="quick-score">{student.activity > 0 ? "+" : ""}{student.activity}đ</strong></article>)}</section>}
     {!shown.length && <div className="surface empty-state"><Search /><h2>Không tìm thấy học sinh</h2><p>Thử nhập một họ tên khác.</p></div>}
+    <Dialog open={!!noteDraft} onOpenChange={(open) => !open && setNoteDraft(null)}><DialogContent><DialogHeader><DialogTitle className="dialog-title"><Pencil /> Nhận xét trong tiết học</DialogTitle><DialogDescription>{data.students.find((item) => item.id === noteDraft?.studentId)?.name} · {classroom.name}</DialogDescription></DialogHeader><label className="form-stack">Nội dung nhận xét<textarea rows={5} value={noteDraft?.value ?? ""} onChange={(event) => setNoteDraft((current) => current ? { ...current, value: event.target.value } : current)} placeholder="Ghi nhận tiến bộ, điểm cần hỗ trợ hoặc minh chứng quan sát được..." /></label><DialogFooter><Button variant="ghost" onClick={() => setNoteDraft(null)}>Hủy</Button><Button onClick={saveNote}><Save /> Lưu nhận xét</Button></DialogFooter></DialogContent></Dialog>
   </div>;
 }
 
@@ -380,12 +490,24 @@ function StudentManager({ open, classroom, data, setData, onClose }: { open: boo
   const [pasted, setPasted] = useState("");
   const [form, setForm] = useState({ name: "", gender: "Nữ" as Student["gender"], parentName: "", parentPhone: "", note: "" });
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = classroom ? data.students.filter((item) => item.classId === classroom.id) : [];
   const addStudents = (rows: { name: string; gender?: string; parentName?: string; parentPhone?: string; note?: string }[]) => {
-    if (!classroom) return; const valid = rows.filter((row) => row.name?.trim()); if (!valid.length) return toast.error("Không tìm thấy học sinh hợp lệ.");
+    if (!classroom) return;
+    const existingNames = new Set(current.map((student) => student.name.trim().toLocaleLowerCase("vi")));
+    const seenNames = new Set<string>();
+    const valid = rows.filter((row) => {
+      const normalizedName = row.name?.trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+      if (!normalizedName || existingNames.has(normalizedName) || seenNames.has(normalizedName)) return false;
+      seenNames.add(normalizedName);
+      return true;
+    });
+    if (!valid.length) return toast.error("Không tìm thấy học sinh mới hợp lệ hoặc danh sách đã bị trùng.");
     const added: Student[] = valid.map((row, index) => ({ id: `s${Date.now()}${index}`, classId: classroom.id, name: row.name.trim(), gender: row.gender === "Nam" || row.gender === "Khác" ? row.gender : "Nữ", parentName: row.parentName?.trim() ?? "", parentPhone: row.parentPhone?.trim() ?? "", note: row.note?.trim() ?? "", hand: 0, correct: 0, praise: 0, activity: 0, attendance: "present", scores: { tx1: null, tx2: null, tx3: null, mid: null, practice: null, final: null } }));
-    setData({ ...data, students: [...data.students,...added], classes: data.classes.map((item) => item.id === classroom.id ? { ...item, studentIds: [...(item.studentIds ?? []),...added.map((student) => student.id)] } : item) }); toast.success(`Đã thêm ${added.length} học sinh vào ${classroom.name}.`);
+    setData({ ...data, students: [...data.students,...added], classes: data.classes.map((item) => item.id === classroom.id ? { ...item, studentIds: [...(item.studentIds ?? []),...added.map((student) => student.id)] } : item) });
+    const skipped = rows.length - valid.length;
+    toast.success(`Đã thêm ${added.length} học sinh vào ${classroom.name}${skipped > 0 ? `, bỏ qua ${skipped} dòng trống hoặc trùng` : ""}.`);
   };
   const deleteStudent = (studentId: string, studentName: string) => {
     if (!classroom) return;
@@ -405,25 +527,27 @@ function StudentManager({ open, classroom, data, setData, onClose }: { open: boo
     setEditingStudent(null);
     toast.success("Đã cập nhật thông tin học sinh.");
   };
-  const addPasted = () => { addStudents(pasted.split(/\r?\n/).map((line) => { const [name,gender,parentName,parentPhone,note] = line.split(/\t|,/); return { name,gender,parentName,parentPhone,note }; })); setPasted(""); };
+  const addPasted = () => { addStudents(pasted.split(/\r?\n/).filter(Boolean).map((line) => { const [name,gender,parentName,parentPhone,note] = parseDelimitedRow(line); return { name,gender,parentName,parentPhone,note }; })); setPasted(""); };
   const addManual = () => { if (!form.name.trim()) return toast.error("Vui lòng nhập họ và tên học sinh."); addStudents([form]); setForm({ name: "", gender: "Nữ", parentName: "", parentPhone: "", note: "" }); };
   const importCsv = async (file?: File) => {
     if (!file) return;
     try {
+      if (file.size > 5 * 1024 * 1024) return toast.error("Tệp vượt quá 5 MB. Vui lòng chia nhỏ danh sách.");
       if (file.name.toLowerCase().endsWith(".xlsx")) {
+        const { readSheet } = await import("read-excel-file/browser");
         const rows = await readSheet(file);
         const body = /họ|ho|name/i.test(String(rows[0]?.[0] ?? "")) ? rows.slice(1) : rows;
         addStudents(body.map((row) => ({ name: String(row[0] ?? ""), gender: String(row[1] ?? ""), parentName: String(row[2] ?? ""), parentPhone: String(row[3] ?? ""), note: String(row[4] ?? "") })));
       } else {
         const text = await file.text(); const lines = text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(Boolean); const body = /họ|ho|name/i.test(lines[0] ?? "") ? lines.slice(1) : lines;
-        addStudents(body.map((line) => { const [name,gender,parentName,parentPhone,note] = line.split(/,|;|\t/).map((cell) => cell.replace(/^"|"$/g,"").trim()); return { name,gender,parentName,parentPhone,note }; }));
+        addStudents(body.map((line) => { const [name,gender,parentName,parentPhone,note] = parseDelimitedRow(line); return { name,gender,parentName,parentPhone,note }; }));
       }
     } catch { toast.error("Không đọc được tệp. Vui lòng dùng đúng file .xlsx hoặc CSV theo mẫu."); }
     if (fileRef.current) fileRef.current.value = "";
   };
   const downloadTemplate = () => { const content = "Họ và tên,Giới tính,Họ tên phụ huynh,Số điện thoại,Ghi chú\nNguyễn Văn An,Nam,Nguyễn Văn Bình,0901234567,"; const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "mau-danh-sach-hoc-sinh.csv"; link.click(); URL.revokeObjectURL(url); };
-  return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="student-dialog"><DialogHeader><DialogTitle className="dialog-title"><UserRoundPlus /> Quản lý & nhập danh sách học sinh · {classroom?.name}</DialogTitle><DialogDescription>Dữ liệu được lưu trên trình duyệt của thiết bị này.</DialogDescription></DialogHeader><Tabs defaultValue="paste"><TabsList className="student-tabs"><TabsTrigger value="file"><FileSpreadsheet /> Tải tệp Excel / CSV</TabsTrigger><TabsTrigger value="paste"><ClipboardCheck /> Dán từ Excel / Sheets</TabsTrigger><TabsTrigger value="manual"><Plus /> Thêm thủ công 1 HS</TabsTrigger><TabsTrigger value="list"><UsersRound /> Danh sách {current.length} HS</TabsTrigger></TabsList>
-    <TabsContent value="file" className="tab-panel"><input ref={fileRef} type="file" accept=".xlsx,.csv,.txt" hidden onChange={(event) => importCsv(event.target.files?.[0])} /><button className="upload-zone" onClick={() => fileRef.current?.click()}><Upload /><strong>Kéo thả hoặc bấm để tải danh sách Excel / CSV</strong><span>Hỗ trợ tệp .xlsx, .csv và dữ liệu xuất từ Google Sheets.</span><b>Chọn tệp danh sách</b></button><div className="template-row"><div><strong>Chưa có file đúng định dạng?</strong><p>Tải file mẫu gồm 5 cột thông tin cơ bản.</p></div><Button variant="outline" onClick={downloadTemplate}><Download /> Tải file mẫu (.csv)</Button></div></TabsContent>
+  return <><Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent className="student-dialog"><DialogHeader><DialogTitle className="dialog-title"><UserRoundPlus /> Quản lý & nhập danh sách học sinh · {classroom?.name}</DialogTitle><DialogDescription>Dữ liệu được lưu trên trình duyệt của thiết bị này.</DialogDescription></DialogHeader><Tabs defaultValue="paste"><TabsList className="student-tabs"><TabsTrigger value="file"><FileSpreadsheet /> Tải tệp Excel / CSV</TabsTrigger><TabsTrigger value="paste"><ClipboardCheck /> Dán từ Excel / Sheets</TabsTrigger><TabsTrigger value="manual"><Plus /> Thêm thủ công 1 HS</TabsTrigger><TabsTrigger value="list"><UsersRound /> Danh sách {current.length} HS</TabsTrigger></TabsList>
+    <TabsContent value="file" className="tab-panel"><input ref={fileRef} type="file" accept=".xlsx,.csv,.txt" hidden onChange={(event) => importCsv(event.target.files?.[0])} /><button className="upload-zone" onClick={() => fileRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void importCsv(event.dataTransfer.files?.[0]); }}><Upload /><strong>Kéo thả hoặc bấm để tải danh sách Excel / CSV</strong><span>Hỗ trợ tệp .xlsx, .csv và dữ liệu xuất từ Google Sheets, tối đa 5 MB.</span><b>Chọn tệp danh sách</b></button><div className="template-row"><div><strong>Chưa có file đúng định dạng?</strong><p>Tải file mẫu gồm 5 cột thông tin cơ bản.</p></div><Button variant="outline" onClick={downloadTemplate}><Download /> Tải file mẫu (.csv)</Button></div></TabsContent>
     <TabsContent value="paste" className="tab-panel"><label>Sao chép các cột từ Excel/Google Sheets rồi dán vào đây<textarea rows={7} value={pasted} onChange={(event) => setPasted(event.target.value)} placeholder={"Nguyễn Văn An\tNam\tNguyễn Văn Bình\t0901234567\nTrần Thị Mai\tNữ\tTrần Văn Nam\t0912345678"} /></label><Button className="wide" onClick={addPasted}><ClipboardCheck /> Xác nhận và thêm danh sách học sinh</Button></TabsContent>
     <TabsContent value="manual" className="tab-panel"><div className="two-col-form"><label>Họ và tên học sinh *<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Nhập họ tên học sinh" /></label><label>Giới tính<Select value={form.gender} onValueChange={(value) => setForm({ ...form, gender: value as Student["gender"] })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Nữ">Nữ</SelectItem><SelectItem value="Nam">Nam</SelectItem><SelectItem value="Khác">Khác</SelectItem></SelectContent></Select></label><label>Họ tên phụ huynh<input value={form.parentName} onChange={(event) => setForm({ ...form, parentName: event.target.value })} placeholder="Nhập họ tên phụ huynh" /></label><label>Số điện thoại phụ huynh<input value={form.parentPhone} onChange={(event) => setForm({ ...form, parentPhone: event.target.value })} placeholder="Nhập số điện thoại liên hệ" /></label></div><label>Ghi chú cá biệt / sức khỏe / môn học<input value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="Ghi chú thêm nếu có" /></label><Button className="wide" onClick={addManual}><Plus /> Thêm học sinh vào danh sách</Button></TabsContent>
     <TabsContent value="list" className="tab-panel student-list-panel">
@@ -459,7 +583,7 @@ function StudentManager({ open, classroom, data, setData, onClose }: { open: boo
               <Button size="icon-sm" variant="ghost" aria-label={`Sửa ${student.name}`} onClick={() => setEditingStudent({ ...student })}>
                 <Pencil />
               </Button>
-              <Button size="icon-sm" variant="ghost" style={{ color: "var(--destructive)" }} aria-label={`Xóa ${student.name}`} onClick={() => deleteStudent(student.id, student.name)}>
+              <Button size="icon-sm" variant="ghost" style={{ color: "var(--destructive)" }} aria-label={`Xóa ${student.name}`} onClick={() => setPendingDelete({ id: student.id, name: student.name })}>
                 <UserX />
               </Button>
             </div>
@@ -468,7 +592,9 @@ function StudentManager({ open, classroom, data, setData, onClose }: { open: boo
       )}
       {!current.length && <div className="empty-state"><UsersRound /><strong>Chưa có học sinh</strong><p>Chọn một phương thức nhập ở phía trên để bắt đầu.</p></div>}
     </TabsContent>
-    </Tabs><DialogFooter><span className="dialog-count">Tổng số học sinh lớp: <strong>{current.length}</strong></span><Button variant="ghost" onClick={onClose}>Hủy</Button><Button onClick={() => { onClose(); toast.success("Danh sách học sinh đã được lưu."); }}><Save /> Lưu danh sách học sinh vào lớp</Button></DialogFooter></DialogContent></Dialog>;
+    </Tabs><DialogFooter><span className="dialog-count">Tổng số học sinh lớp: <strong>{current.length}</strong></span><Button variant="ghost" onClick={onClose}>Đóng</Button><Button onClick={() => { onClose(); toast.success("Danh sách học sinh đã được lưu."); }}><Save /> Hoàn tất</Button></DialogFooter></DialogContent></Dialog>
+    <AlertDialog open={!!pendingDelete} onOpenChange={(value) => !value && setPendingDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Xóa học sinh khỏi lớp?</AlertDialogTitle><AlertDialogDescription>Bạn sắp xóa {pendingDelete?.name} khỏi {classroom?.name}. Thao tác này cũng xóa điểm số và dữ liệu hoạt động của học sinh trên thiết bị này.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Hủy</AlertDialogCancel><AlertDialogAction className="danger-confirm" onClick={() => { if (pendingDelete) deleteStudent(pendingDelete.id, pendingDelete.name); setPendingDelete(null); }}>Xác nhận xóa</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  </>;
 }
 
 function ReportsPage({ data, students, classroom, navigate }: { data: AppData; students: Student[]; classroom: Classroom; navigate: (key: string) => void }) {
@@ -505,10 +631,9 @@ function AssistantPage({ data, setData, students, classroom }: { data: AppData; 
   const [tone, setTone] = useState("encouraging");
   const [sources, setSources] = useState({ scores: true, activity: true, attendance: true, note: false });
   const [comment, setComment] = useState("");
-  useEffect(() => { setSelectedId(students[0]?.id ?? ""); setComment(""); }, [classroom.id]);
   const student = students.find((item) => item.id === selectedId) ?? students[0];
   if (!student) return <div className="surface empty-state"><Bot /><h2>Chưa có dữ liệu để tạo nhận xét</h2><p>Hãy thêm học sinh vào {classroom.name} trước.</p></div>;
-  const toggleSource = (key: keyof typeof sources, checked: boolean) => setSources({ ...sources, [key]: checked });
+  const toggleSource = (key: keyof typeof sources, checked: boolean) => setSources((current) => ({ ...current, [key]: checked }));
   const generate = () => {
     if (!Object.values(sources).some(Boolean)) return toast.error("Vui lòng chọn ít nhất một nhóm dữ liệu.");
     const parts: string[] = [];
@@ -536,7 +661,6 @@ function AssistantPage({ data, setData, students, classroom }: { data: AppData; 
 
 function ProfilesPage({ data, students, classroom, navigate }: { data: AppData; students: Student[]; classroom: Classroom; navigate: (key: string) => void }) {
   const [selectedId, setSelectedId] = useState(students[0]?.id ?? "");
-  useEffect(() => setSelectedId(students[0]?.id ?? ""), [classroom.id, students]);
   const student = students.find((item) => item.id === selectedId) ?? students[0];
   if (!student) return <div className="surface empty-state"><UsersRound /><h2>Chưa có học sinh trong {classroom.name}</h2><p>Hãy nhập danh sách học sinh ở trang Lớp học.</p></div>;
   const chartValues = scoreColumns.map((column) => ({ label: column.label.replace("Thường xuyên", "TX"), value: student.scores[column.key] }));
@@ -563,12 +687,6 @@ function SettingsPage({ data, setData }: { data: AppData; setData: DataSetter })
     "Lịch sử & Địa lý", "Sinh học", "Hóa học", "Lịch sử", "Tin học", "Công nghệ", "GDCD"
   ];
 
-  useEffect(() => {
-    setTeacherName(data.teacherName || "Mai Hoa");
-    setSchoolName(data.schoolName || "");
-    setSubject(data.subject || "Địa lý");
-  }, [data.teacherName, data.schoolName, data.subject]);
-
   const saveGeneral = () => {
     if (!teacherName.trim()) return toast.error("Vui lòng nhập họ và tên giáo viên.");
     if (!subject.trim()) return toast.error("Vui lòng nhập hoặc chọn môn học.");
@@ -588,8 +706,19 @@ function SettingsPage({ data, setData }: { data: AppData; setData: DataSetter })
   const addClass = () => {
     if (!newClass.trim()) return toast.error("Vui lòng nhập tên lớp.");
     const grade = Number(newGrade);
-    setData({ ...data, classes: [...data.classes, { id: `c${Date.now()}`, name: newClass.startsWith("Lớp") ? newClass : `Lớp ${newClass}`, grade, room: `Phòng ${newClass}`, studentIds: [] }] });
+    const cleanName = newClass.trim().replace(/\s+/g, " ");
+    const displayName = /^lớp\s/i.test(cleanName) ? cleanName : `Lớp ${cleanName}`;
+    if (data.classes.some((item) => item.name.toLocaleLowerCase("vi") === displayName.toLocaleLowerCase("vi"))) return toast.error("Lớp học này đã tồn tại.");
+    setData({ ...data, classes: [...data.classes, { id: `c${Date.now()}`, name: displayName, grade, room: `Phòng ${cleanName}`, studentIds: [] }] });
     setNewClass(""); toast.success("Đã thêm lớp học mới.");
+  };
+  const resetToSample = () => {
+    const restored = cloneInitial();
+    setTeacherName(restored.teacherName);
+    setSchoolName(restored.schoolName);
+    setSubject(restored.subject);
+    setData(restored, "Khôi phục dữ liệu mẫu ban đầu");
+    toast.success("Đã khôi phục dữ liệu mẫu.");
   };
   const downloadBackup = () => {
     const payload = { version: 2, exportedAt: new Date().toISOString(), data };
@@ -606,7 +735,11 @@ function SettingsPage({ data, setData }: { data: AppData; setData: DataSetter })
       const wrapped = parsed as { data?: Partial<AppData> };
       const candidate = wrapped.data && typeof wrapped.data === "object" ? wrapped.data : parsed as Partial<AppData>;
       if (!Array.isArray(candidate.classes) || !Array.isArray(candidate.students) || !Array.isArray(candidate.schedule)) throw new Error("invalid");
-      setData(normalizeData(candidate), "Khôi phục dữ liệu từ bản sao lưu"); toast.success("Đã khôi phục dữ liệu từ bản sao lưu.");
+      const restored = normalizeData(candidate);
+      setTeacherName(restored.teacherName);
+      setSchoolName(restored.schoolName);
+      setSubject(restored.subject);
+      setData(restored, "Khôi phục dữ liệu từ bản sao lưu"); toast.success("Đã khôi phục dữ liệu từ bản sao lưu.");
     } catch { toast.error("Tệp sao lưu không hợp lệ hoặc đã bị hỏng."); }
     if (backupRef.current) backupRef.current.value = "";
   };
@@ -684,6 +817,6 @@ function SettingsPage({ data, setData }: { data: AppData; setData: DataSetter })
     <section className="surface settings-section"><h2><BookOpenCheck /> Hệ số công thức tính điểm môn học</h2><div className="weight-grid">{scoreColumns.map((column) => <label key={column.key}><strong>{column.label}</strong><span>Hệ số tính ĐTB</span><Select value={String(data.scoreWeights[column.key])} onValueChange={(value) => setData({ ...data, scoreWeights: { ...data.scoreWeights, [column.key]: Number(value) } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Hệ số 1</SelectItem><SelectItem value="2">Hệ số 2</SelectItem><SelectItem value="3">Hệ số 3</SelectItem></SelectContent></Select></label>)}</div></section>
     <section className="surface settings-section"><h2><Plus /> Quản lý & Thêm lớp học mới</h2><div className="add-class-row"><Select value={newGrade} onValueChange={setNewGrade}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[6,7,8,9,10,11,12].map((item) => <SelectItem key={item} value={String(item)}>Khối {item}</SelectItem>)}</SelectContent></Select><input value={newClass} onChange={(event) => setNewClass(event.target.value)} placeholder="Tên lớp (VD: 11B2, 11B3...)" /><Button onClick={addClass}><Plus /> Thêm lớp</Button></div><div className="existing-classes">{data.classes.map((item) => <span key={item.id}>{item.name} (Khối {item.grade})</span>)}</div></section>
     <section className="backup-grid"><article className="surface backup-card"><div className="card-heading"><div><h2><DatabaseBackup /> Sao lưu & khôi phục</h2><p>Tạo một tệp chứa toàn bộ dữ liệu đang lưu trên trình duyệt.</p></div><ShieldCheck /></div><div className="backup-actions"><Button onClick={downloadBackup}><Download /> Tải bản sao lưu</Button><input ref={backupRef} type="file" accept=".json,application/json" hidden onChange={(event) => restoreBackup(event.target.files?.[0])} /><Button variant="outline" onClick={() => backupRef.current?.click()}><Upload /> Khôi phục từ tệp</Button></div><small>Dữ liệu chỉ được đọc hoặc ghi khi giáo viên chủ động thao tác.</small></article><article className="surface history-card"><div className="card-heading"><div><h2><FileClock /> Lịch sử chỉnh sửa</h2><p>{data.auditLog.length} hoạt động gần nhất được lưu cục bộ</p></div><span className="history-count">{Math.min(data.auditLog.length, 80)}/80</span></div><div className="history-list">{data.auditLog.slice(0, 12).map((entry) => <div className="history-item" key={entry.id}><i /><div><strong>{entry.action}</strong><small>{new Date(entry.at).toLocaleString("vi-VN")}</small></div></div>)}{!data.auditLog.length && <div className="history-empty"><FileClock /> Chưa có thay đổi nào trong phiên bản này.</div>}</div></article></section>
-    <section className="danger-zone"><div><strong>Khôi phục dữ liệu mẫu ban đầu</strong><p>Đặt lại toàn bộ lớp, học sinh, thời khóa biểu và điểm số. Nên tải bản sao lưu trước khi thực hiện.</p></div><AlertDialog><AlertDialogTrigger asChild><Button variant="destructive"><RotateCcw /> Đặt lại dữ liệu</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Khôi phục toàn bộ dữ liệu mẫu?</AlertDialogTitle><AlertDialogDescription>Mọi thay đổi đang lưu trên trình duyệt sẽ bị thay thế. Bạn có thể khôi phục lại nếu đã tải bản sao lưu.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Hủy</AlertDialogCancel><AlertDialogAction onClick={() => { setData(cloneInitial(), "Khôi phục dữ liệu mẫu ban đầu"); toast.success("Đã khôi phục dữ liệu mẫu."); }}>Xác nhận đặt lại</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></section>
+    <section className="danger-zone"><div><strong>Khôi phục dữ liệu mẫu ban đầu</strong><p>Đặt lại toàn bộ lớp, học sinh, thời khóa biểu và điểm số. Nên tải bản sao lưu trước khi thực hiện.</p></div><AlertDialog><AlertDialogTrigger asChild><Button variant="destructive"><RotateCcw /> Đặt lại dữ liệu</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Khôi phục toàn bộ dữ liệu mẫu?</AlertDialogTitle><AlertDialogDescription>Mọi thay đổi đang lưu trên trình duyệt sẽ bị thay thế. Bạn có thể khôi phục lại nếu đã tải bản sao lưu.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Hủy</AlertDialogCancel><AlertDialogAction onClick={resetToSample}>Xác nhận đặt lại</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></section>
   </div>;
 }
