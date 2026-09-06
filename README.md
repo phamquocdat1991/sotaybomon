@@ -1,5 +1,7 @@
 # Sổ tay bộ môn Địa lý
 
+Phiên bản hiện tại: **4.1.0 — B-Light**.
+
 Ứng dụng quản lý công việc dành cho giáo viên bộ môn, tái hiện các luồng trong video tham chiếu: tổng quan, thời khóa biểu, theo dõi tiết học, lớp học, hồ sơ học sinh, sổ điểm và thiết lập.
 
 ## Chạy trên máy
@@ -52,7 +54,7 @@ Scripts that need writable project-scoped home, npm, XDG, and temporary paths us
 
 - edit site code under `app/`
 - `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
+- `.openai/hosting.json`, when present, declares optional Sites D1 and R2 bindings
 - `vite.config.ts` simulates declared bindings for local development
 - `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
 - `db/schema.ts` starts intentionally empty

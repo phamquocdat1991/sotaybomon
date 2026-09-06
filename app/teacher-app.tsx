@@ -241,7 +241,7 @@ export default function TeacherApp() {
       <div className="teacher-card">
         <span className="teacher-avatar">{(data.teacherName || "M").trim().split(" ").at(-1)?.[0]}</span>
         <div><strong>{data.teacherName || "Mai Hoa"}</strong><small>{data.subject || "Địa lý"}{data.schoolName ? ` · ${data.schoolName}` : ""}</small></div>
-        <span className="edition">4.0</span>
+        <span className="edition">4.1</span>
       </div>
       <nav className="main-nav" aria-label="Điều hướng chính">
         {navItems.map(([key,label,Icon]) => <button key={key} className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => navigate(key)}><Icon /><span>{label}</span></button>)}
