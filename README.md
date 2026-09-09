@@ -1,6 +1,6 @@
 # Sổ tay bộ môn Địa lý
 
-Phiên bản hiện tại: **4.1.0 — B-Light**.
+Phiên bản hiện tại: **4.2.0 — Học đường mộng mơ**.
 
 Ứng dụng quản lý công việc dành cho giáo viên bộ môn, tái hiện các luồng trong video tham chiếu: tổng quan, thời khóa biểu, theo dõi tiết học, lớp học, hồ sơ học sinh, sổ điểm và thiết lập.
 
@@ -24,7 +24,8 @@ Mục Báo cáo tổng hợp điểm, điểm danh và hoạt động theo lớp
 ## Nghiệp vụ đã hỗ trợ
 
 - Tổng quan dạng command center theo lớp đang chọn.
-- Thời khóa biểu 38 tuần; thêm, sửa và xác nhận trước khi xóa tiết.
+- Thời khóa biểu độc lập cho 38 tuần; thêm, sửa, xóa và đánh dấu tiết đã hoàn thành. Lịch cũ chưa có số tuần được giữ ở tuần 1. Thay đổi chỉ áp dụng cho tuần đang xem.
+- Tổng quan cho phép chọn tuần để xem lịch và số tiết đã hoàn thành.
 - Điểm danh, ghi nhận hoạt động, hoàn tác và lưu nhận xét nhanh trong tiết học.
 - Nhập điểm, tính trung bình theo hệ số và xuất CSV.
 - Thêm, sửa, xác nhận trước khi xóa học sinh; nhập `.xlsx`, CSV hoặc dữ liệu dán từ Sheets.

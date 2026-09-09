@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeSchedule, scheduleForWeek, type ScheduleEntry } from "./schedule-data";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle, BarChart3, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft,
@@ -34,7 +35,7 @@ type Student = {
   attendance: AttendanceStatus;
   scores: Record<string, number | null>;
 };
-type ScheduleEntry = { id: string; day: number; period: number; classId: string; room: string; note: string };
+
 type AuditEntry = { id: string; at: string; action: string };
 type AppData = {
   title: string; teacherName: string; schoolName: string;
@@ -116,7 +117,7 @@ function normalizeData(value: Partial<AppData>): AppData {
         : sourceStudents.filter((student) => student.classId === classroom.id).map((student) => student.id),
     })),
     students: sourceStudents.map((student) => ({ ...student, attendance: student.attendance ?? "present", scores: { tx1: null, tx2: null, tx3: null, mid: null, practice: null, final: null, ...student.scores } })) as Student[],
-    schedule: Array.isArray(value.schedule) ? value.schedule : fallback.schedule,
+    schedule: normalizeSchedule(Array.isArray(value.schedule) ? value.schedule : fallback.schedule),
     scoreWeights: { ...fallback.scoreWeights, ...(value.scoreWeights ?? {}) },
     auditLog: Array.isArray(value.auditLog) ? value.auditLog : [],
   };
@@ -234,14 +235,14 @@ export default function TeacherApp() {
       <div className="side-panel-head">
         <button className="brand" onClick={() => navigate("dashboard")} aria-label="Về trang tổng quan">
           <span className="brand-mark"><BookOpenCheck /></span>
-          <span className="brand-copy"><strong>SỔ TAY BỘ MÔN</strong><small>Không gian làm việc giáo viên</small></span>
+          <span className="brand-copy"><strong>SỔ TAY BỘ MÔN</strong><small>Kết nối tri thức · Ươm mầm tương lai</small></span>
         </button>
         <Button className="side-close" size="icon" variant="ghost" onClick={() => setMobileNav(false)} aria-label="Đóng điều hướng"><X /></Button>
       </div>
       <div className="teacher-card">
         <span className="teacher-avatar">{(data.teacherName || "M").trim().split(" ").at(-1)?.[0]}</span>
         <div><strong>{data.teacherName || "Mai Hoa"}</strong><small>{data.subject || "Địa lý"}{data.schoolName ? ` · ${data.schoolName}` : ""}</small></div>
-        <span className="edition">4.1</span>
+        <span className="edition">4.2</span>
       </div>
       <nav className="main-nav" aria-label="Điều hướng chính">
         {navItems.map(([key,label,Icon]) => <button key={key} className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => navigate(key)}><Icon /><span>{label}</span></button>)}
@@ -303,11 +304,13 @@ function Dashboard({ data, setData, activeClass, setActiveClassId, navigate, ope
   const [classOpen, setClassOpen] = useState(false);
   const [newClass, setNewClass] = useState({ grade: "8", name: "" });
   const [studentQuery, setStudentQuery] = useState("");
+  const [dashboardWeek, setDashboardWeek] = useState(1);
   const filtered = grade === "all" ? data.classes : data.classes.filter((item) => item.grade === grade);
   const availableGrades = [...new Set(data.classes.map((item) => item.grade))].sort((a, b) => a - b);
   const classStudents = data.students.filter((item) => item.classId === activeClass.id);
-  const classSchedule = data.schedule.filter((item) => item.classId === activeClass.id);
-  const weeklySchedule = [...data.schedule].sort((a, b) => a.day - b.day || a.period - b.period).slice(0, 5);
+  const currentSchedule = scheduleForWeek(data.schedule, dashboardWeek);
+  const classSchedule = currentSchedule.filter((item) => item.classId === activeClass.id);
+  const weeklySchedule = [...currentSchedule].sort((a, b) => a.day - b.day || a.period - b.period).slice(0, 5);
   const studentRows = classStudents.map((student) => ({ student, avg: average(student, data.scoreWeights) }));
   const gradedRows = studentRows.filter((item): item is typeof item & { avg: number } => typeof item.avg === "number");
   const classAverage = gradedRows.length ? gradedRows.reduce((sum, item) => sum + item.avg, 0) / gradedRows.length : null;
@@ -324,7 +327,7 @@ function Dashboard({ data, setData, activeClass, setActiveClassId, navigate, ope
   };
   return <div className="stack-xl">
     <section className="hero-panel">
-      <div className="hero-copy"><span className="eyebrow"><CalendarDays /> {data.semester} · Năm học {data.schoolYear}</span><h1>Xin chào {data.teacherName || "thầy/cô"}!</h1><p>Mọi lớp học, tiết dạy và tiến bộ của học sinh được sắp xếp rõ ràng trong một không gian làm việc.</p><div className="hero-note"><BookOpenCheck /><span><strong>Sẵn sàng cho tiết dạy tiếp theo</strong>Dữ liệu được tự động lưu trên thiết bị này.</span></div></div>
+      <div className="hero-copy"><span className="eyebrow"><CalendarDays /> {data.semester} · Năm học {data.schoolYear}</span><h1>Xin chào {data.teacherName || "thầy/cô"}!</h1><p>Mỗi bài học là một hành trình nhỏ, mở ra những chân trời lớn. Cùng học sinh viết tiếp những ngày học thật đẹp.</p><div className="hero-note"><BookOpenCheck /><span><strong>Sẵn sàng cho tiết dạy tiếp theo</strong>Dữ liệu được tự động lưu trên thiết bị này.</span></div></div>
       <div className="hero-current"><small>Lớp đang chọn</small><strong>{activeClass.name} <span>(Khối {activeClass.grade})</span></strong><p>{data.subject} · {activeClass.room}</p><Button onClick={() => navigate("lesson")}><Clock3 /> Bắt đầu tiết học ngay</Button></div>
     </section>
     <section className="metric-grid">
@@ -341,8 +344,8 @@ function Dashboard({ data, setData, activeClass, setActiveClassId, navigate, ope
         <div className="active-class-actions"><Button onClick={() => navigate("lesson")}><UserCheck /> Điểm danh</Button><Button variant="outline" onClick={() => navigate("grades")}><Table2 /> Nhập điểm</Button></div>
       </article>
       <article className="surface schedule-preview">
-        <div className="card-heading"><div><h2><CalendarDays /> Lịch dạy trong tuần</h2><p>{data.schedule.length} tiết đã được thiết lập</p></div><Button variant="ghost" onClick={() => navigate("schedule")}>Xem thời khóa biểu <ChevronRight /></Button></div>
-        <div className="schedule-preview-list">{weeklySchedule.map((entry) => { const classroom = data.classes.find((item) => item.id === entry.classId); return <button key={entry.id} className={entry.classId === activeClass.id ? "active" : ""} onClick={() => { setActiveClassId(entry.classId); navigate("lesson"); }}><span className="schedule-day">T{entry.day}<small>Tiết {entry.period}</small></span><span><strong>{classroom?.name ?? "Lớp học"}</strong><small>{entry.note}</small></span><span className="schedule-room">{entry.room}<ChevronRight /></span></button>; })}{!weeklySchedule.length && <div className="compact-empty"><CalendarDays /> Chưa có tiết dạy. Hãy mở Thời khóa biểu để thiết lập.</div>}</div>
+        <div className="card-heading"><div><h2><CalendarDays /> Lịch dạy trong tuần</h2><p>{currentSchedule.length} tiết · {currentSchedule.filter(item => item.completed).length} đã hoàn thành</p><label>Tuần <select aria-label="Tuần trên tổng quan" value={dashboardWeek} onChange={event => setDashboardWeek(Number(event.target.value))}>{Array.from({length:38}, (_,i) => <option key={i+1} value={i+1}>{i+1}</option>)}</select></label></div><Button variant="ghost" onClick={() => navigate("schedule")}>Xem thời khóa biểu <ChevronRight /></Button></div>
+        <div className="schedule-preview-list">{weeklySchedule.map((entry) => { const classroom = data.classes.find((item) => item.id === entry.classId); return <button key={entry.id} className={entry.classId === activeClass.id ? "active" : ""} onClick={() => { setActiveClassId(entry.classId); navigate("lesson"); }}><span className="schedule-day">T{entry.day}<small>Tiết {entry.period}</small></span><span><strong>{classroom?.name ?? "Lớp học"}</strong><small>{entry.note}{entry.completed ? " · Đã hoàn thành" : ""}</small></span><span className="schedule-room">{entry.room}<ChevronRight /></span></button>; })}{!weeklySchedule.length && <div className="compact-empty"><CalendarDays /> Chưa có tiết dạy. Hãy mở Thời khóa biểu để thiết lập.</div>}</div>
       </article>
       <article className="surface dashboard-attention-panel">
         <div className="card-heading"><div><h2><AlertTriangle /> Học sinh cần chú ý</h2><p>Cảnh báo từ dữ liệu hiện có</p></div><Button variant="ghost" onClick={() => navigate("report")}>Xem tất cả <ChevronRight /></Button></div>
@@ -373,18 +376,20 @@ function ClassCard({ item, data, selected, teach, manage }: { item: Classroom; d
 function SchedulePage({ data, setData, activeClassId }: { data: AppData; setData: (value: AppData) => void; activeClassId: string }) {
   const [week, setWeek] = useState(1);
   const [editing, setEditing] = useState<Partial<ScheduleEntry> | null>(null);
-  const openSlot = (day: number, period: number) => { const existing = data.schedule.find((item) => item.day === day && item.period === period); setEditing(existing ? { ...existing } : { day, period, classId: activeClassId, room: "", note: "" }); };
+  const weekSchedule = scheduleForWeek(data.schedule, week);
+  const openSlot = (day: number, period: number) => { const existing = weekSchedule.find((item) => item.day === day && item.period === period); setEditing(existing ? { ...existing } : { day, period, week, completed: false, classId: activeClassId, room: "", note: "" }); };
   const save = () => {
     if (!editing?.classId || !editing.day || !editing.period) return;
     const selectedClass = data.classes.find((item) => item.id === editing.classId);
-    const item: ScheduleEntry = { id: editing.id ?? `e${Date.now()}`, day: editing.day, period: editing.period, classId: editing.classId, room: editing.room?.trim() || selectedClass?.room || "Chưa xếp phòng", note: editing.note?.trim() || "Tiết học Địa lý" };
+    const item: ScheduleEntry = { id: editing.id ?? `e${Date.now()}`, week, completed: editing.completed === true, day: editing.day, period: editing.period, classId: editing.classId, room: editing.room?.trim() || selectedClass?.room || "Chưa xếp phòng", note: editing.note?.trim() || `Tiết học ${data.subject}` };
     setData({ ...data, schedule: editing.id ? data.schedule.map((entry) => entry.id === editing.id ? item : entry) : [...data.schedule, item] }); setEditing(null); toast.success(`Đã lưu Thứ ${item.day} · Tiết ${item.period}.`);
   };
   const remove = () => { if (!editing?.id) return; setData({ ...data, schedule: data.schedule.filter((item) => item.id !== editing.id) }); setEditing(null); toast.success("Đã xóa tiết khỏi thời khóa biểu."); };
   return <div className="stack-xl">
     <section className="week-panel"><div className="week-head"><div><small>NĂM HỌC {data.schoolYear}</small><h1>TUẦN {week} / 38</h1></div><div className="week-nav"><Button size="icon" variant="ghost" aria-label="Tuần trước" onClick={() => setWeek(Math.max(1, week - 1))}><ChevronLeft /></Button><span>Đang xem tuần {week}</span><Button size="icon" variant="ghost" aria-label="Tuần sau" onClick={() => setWeek(Math.min(38, week + 1))}><ChevronRight /></Button></div></div><div className="week-chips" aria-label="Chọn tuần">{Array.from({ length: 38 }, (_, index) => index + 1).map((item) => <button aria-pressed={week === item} className={week === item ? "active" : ""} onClick={() => setWeek(item)} key={item}>T{item}</button>)}</div></section>
-    <section className="surface schedule-surface"><div className="schedule-grid"><div className="schedule-header corner">BUỔI / TIẾT</div>{days.map((day) => <div key={day} className="schedule-header">THỨ {day}</div>)}{periods.map((period) => <div className="schedule-row" key={period}><div className="period-label"><span>{period <= 3 ? "BUỔI SÁNG" : "BUỔI CHIỀU"}</span>TIẾT {period}</div>{days.map((day) => { const entry = data.schedule.find((item) => item.day === day && item.period === period); const classroom = data.classes.find((item) => item.id === entry?.classId); const actionLabel = entry ? `Sửa Thứ ${day}, Tiết ${period}: ${classroom?.name ?? "Lớp học"}` : `Thêm tiết Thứ ${day}, Tiết ${period}`; return <button key={day} aria-label={actionLabel} className={entry ? "schedule-cell filled" : "schedule-cell"} onClick={() => openSlot(day, period)}>{entry ? <><span className="schedule-class">{classroom?.name}</span><strong>{data.subject}</strong><small>{entry.room}</small><Pencil /></> : <Plus />}</button>; })}</div>)}</div></section>
-    <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}><DialogContent><DialogHeader><DialogTitle className="dialog-title"><CalendarDays /> Thiết lập tiết dạy · Thứ {editing?.day}</DialogTitle><DialogDescription>{(editing?.period ?? 1) <= 3 ? "Buổi sáng" : "Buổi chiều"} · Tiết {editing?.period}</DialogDescription></DialogHeader><div className="form-stack"><label>Chọn lớp học<Select value={editing?.classId} onValueChange={(value) => setEditing({ ...editing, classId: value })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent>{data.classes.map((item) => <SelectItem value={item.id} key={item.id}>{item.name} · Khối {item.grade}</SelectItem>)}</SelectContent></Select></label><label>Môn giảng dạy<input value={data.subject} readOnly /></label><label>Phòng học<input value={editing?.room ?? ""} onChange={(event) => setEditing({ ...editing, room: event.target.value })} placeholder="Nhập phòng học" /></label><label>Ghi chú tiết học<input value={editing?.note ?? ""} onChange={(event) => setEditing({ ...editing, note: event.target.value })} placeholder="Nội dung bài học, dặn dò..." /></label></div><DialogFooter>{editing?.id && <AlertDialog><AlertDialogTrigger asChild><Button variant="destructive">Xóa tiết</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Xóa tiết khỏi thời khóa biểu?</AlertDialogTitle><AlertDialogDescription>Thứ {editing.day} · Tiết {editing.period} sẽ bị xóa khỏi lịch dạy trên thiết bị này.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Hủy</AlertDialogCancel><AlertDialogAction className="danger-confirm" onClick={remove}>Xác nhận xóa</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>}<Button variant="ghost" onClick={() => setEditing(null)}>Hủy</Button><Button className="purple-action" onClick={save}><Save /> Lưu tiết dạy</Button></DialogFooter></DialogContent></Dialog>
+    <p className="schedule-guidance">Lịch cũ được giữ ở tuần 1. Mỗi tuần lưu riêng; sửa hoặc xóa một tiết chỉ áp dụng cho tuần đang xem. Tuần {week}: {weekSchedule.filter(item => item.completed).length}/{weekSchedule.length} tiết đã hoàn thành.</p>
+    <section className="surface schedule-surface"><div className="schedule-grid"><div className="schedule-header corner">BUỔI / TIẾT</div>{days.map((day) => <div key={day} className="schedule-header">THỨ {day}</div>)}{periods.map((period) => <div className="schedule-row" key={period}><div className="period-label"><span>{period <= 3 ? "BUỔI SÁNG" : "BUỔI CHIỀU"}</span>TIẾT {period}</div>{days.map((day) => { const entry = weekSchedule.find((item) => item.day === day && item.period === period); const classroom = data.classes.find((item) => item.id === entry?.classId); const actionLabel = entry ? `Sửa Thứ ${day}, Tiết ${period}: ${classroom?.name ?? "Lớp học"}` : `Thêm tiết Thứ ${day}, Tiết ${period}`; return <button key={day} aria-label={actionLabel} className={entry ? "schedule-cell filled" : "schedule-cell"} onClick={() => openSlot(day, period)}>{entry ? <><span className="schedule-class">{classroom?.name}</span><strong>{data.subject}</strong><small>{entry.room}</small><small>{entry.note}</small><span className={entry.completed ? "lesson-status done" : "lesson-status"}>{entry.completed ? "✓ Đã hoàn thành" : "Chưa hoàn thành"}</span><Pencil /></> : <Plus />}</button>; })}</div>)}</div></section>
+    <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}><DialogContent><DialogHeader><DialogTitle className="dialog-title"><CalendarDays /> Tuần {week} · Thứ {editing?.day}</DialogTitle><DialogDescription>{(editing?.period ?? 1) <= 3 ? "Buổi sáng" : "Buổi chiều"} · Tiết {editing?.period}</DialogDescription></DialogHeader><div className="form-stack"><label>Chọn lớp học<Select value={editing?.classId} onValueChange={(value) => setEditing({ ...editing, classId: value })}><SelectTrigger className="field"><SelectValue /></SelectTrigger><SelectContent>{data.classes.map((item) => <SelectItem value={item.id} key={item.id}>{item.name} · Khối {item.grade}</SelectItem>)}</SelectContent></Select></label><label>Môn giảng dạy<input value={data.subject} readOnly /></label><label>Phòng học<input value={editing?.room ?? ""} onChange={(event) => setEditing({ ...editing, room: event.target.value })} placeholder="Nhập phòng học" /></label><label>Ghi chú tiết học<input value={editing?.note ?? ""} onChange={(event) => setEditing({ ...editing, note: event.target.value })} placeholder="Nội dung bài học, dặn dò..." /></label><label className="completion-field"><input type="checkbox" checked={editing?.completed === true} onChange={event => setEditing({ ...editing, completed: event.target.checked })} /> Đánh dấu tiết đã hoàn thành</label></div><DialogFooter>{editing?.id && <AlertDialog><AlertDialogTrigger asChild><Button variant="destructive">Xóa tiết</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Xóa tiết khỏi thời khóa biểu?</AlertDialogTitle><AlertDialogDescription>Thứ {editing.day} · Tiết {editing.period} sẽ bị xóa khỏi lịch dạy trên thiết bị này.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Hủy</AlertDialogCancel><AlertDialogAction className="danger-confirm" onClick={remove}>Xác nhận xóa</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>}<Button variant="ghost" onClick={() => setEditing(null)}>Hủy</Button><Button className="purple-action" onClick={save}><Save /> Lưu tiết dạy</Button></DialogFooter></DialogContent></Dialog>
   </div>;
 }
 

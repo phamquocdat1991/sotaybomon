@@ -646,3 +646,54 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [role="button
   .dashboard-student-search { width: 100%; }
   .dashboard-table-wrap { margin-inline: -17px; }
 }
+
+/* Học đường mộng mơ — shared palette, preserving existing layout and actions. */
+:root { --page:#fff5ec; --background:#fff5ec; --foreground:#283553; --card:#fffcf8; --card-foreground:#283553; --primary:#a94460; --primary-foreground:#fff; --border:#eeddd4; --input:#dfcfc7; --ring:#b75c78; --navy:#35445f; --green:#287b61; --green-dark:#256650; --purple:#8056a4; --soft-shadow:0 8px 28px #bc8e7210; }
+body { background:radial-gradient(ellipse at 90% 0,#fce4da,transparent 60%),var(--page); }
+.side-panel { color:#34405d; background:linear-gradient(160deg,#fffaf1,#ffefe4 70%,#edf3df); border-right:1px solid #eddccd; box-shadow:8px 0 30px #a8806510; }
+.brand,.brand-copy strong,.teacher-card strong,.side-panel-meta strong { color:#29365a; }
+.brand-copy small,.teacher-card small,.side-panel-meta small { color:#756878; }
+.brand-mark { color:#326e69; background:linear-gradient(135deg,#d5efdf,#d5eaf8); box-shadow:none; }
+.teacher-card { background:#ffffff94; border-color:#ecd9cd; }
+.teacher-avatar { color:#814866; background:#f6dfe7; }
+.edition { color:#855768; border-color:#edd3dd; background:#fff0f2; }
+.main-nav button { color:#63566b; }
+.main-nav button:hover { color:#73455d; background:#fbe2dc; }
+.main-nav button.active { color:#643047; background:linear-gradient(110deg,#ffc5c3,#f8adc0); box-shadow:0 5px 14px #e49ba52a; }
+.side-panel-meta { color:#59816a; border-color:#e3dac7; background:#ffffff70; }
+.side-panel-meta::before { content:"Mỗi bài học, một chân trời mới"; display:block; color:#7f6d64; font-style:italic; font-size:12px; margin-bottom:12px; }
+.topbar { background:#fffcf5ed; border-bottom-color:#eeddd4; backdrop-filter:blur(12px); box-shadow:0 4px 20px #be8f6e08; }
+.context-select,.mobile-context-panel .context-select { color:#3e4964 !important; border-color:#e8d8d0 !important; background:#fffcf9 !important; }
+.mobile-menu,.side-close { color:#6e526a !important; }
+.hero-panel { border-color:#ecdbcc; background:linear-gradient(90deg,#fffaf3 5%,#fff9f2f5 38%,#fff8ee20),url('/dreamy-landscape.svg') center/cover; box-shadow:var(--soft-shadow); }
+.hero-panel::after { display:none; }
+.hero-panel h1 { color:#2e385e; }
+.hero-panel p { color:#655d70; max-width:600px; }
+.hero-current { color:#35455b; background:#fffcf2df; border:1px solid #fffaf3; box-shadow:0 10px 24px #9a847116; }
+.hero-current small,.hero-current p,.hero-current strong span { color:#675c70; }
+.hero-current strong { color:#365d66; }
+.hero-current button,.start-action { color:#fff !important; background:#a94460 !important; }
+.hero-panel .eyebrow { color:#755c6d; background:#fff9f0dc; border-color:#ead6c7; }
+.surface,.class-card,.student-action-card { background:#fffcf8; border-color:#eeddd4; }
+.metric-card { border-color:#f0ded5; background:linear-gradient(135deg,#e8f5e8,#fffdf6); }
+.metric-card:nth-child(2) { background:linear-gradient(135deg,#e8f1ff,#fffcf8); }
+.metric-card:nth-child(3) { background:linear-gradient(135deg,#ffebd6,#fffcf8); }
+.metric-card:nth-child(4) { background:linear-gradient(135deg,#f0e5fa,#fffcf8); }
+.metric-card > strong,.card-heading h2 { color:#344265; }
+.week-panel,.report-hero,.assistant-hero { background:linear-gradient(120deg,#f8e5ee,#e7eefb); color:#35405c; border:1px solid #e9dbe7; box-shadow:var(--soft-shadow); }
+.week-head small,.week-head h1,.week-nav button,.report-hero h1,.report-hero p { color:#584c70; }
+.week-nav span,.week-chips button { color:#665675; background:#fffaf8; border-color:#e2d4e2; }
+.week-chips button.active { color:#663249; background:#fac4d0; }
+.schedule-header { color:#3e4965; background:#eee9f5; border-color:#ddd4e7; }
+.schedule-cell.filled { background:#fffdf8; }
+.schedule-guidance { margin:0; color:#6a6070; font-size:14px; line-height:1.6; }
+.lesson-status { padding:4px 7px; border-radius:7px; color:#775f3a; background:#fff0d9; font-size:11px; }
+.lesson-status.done { color:#23614b; background:#dff1e4; }
+.completion-field { display:flex !important; align-items:center; gap:10px; }
+.completion-field input { width:18px; min-height:18px; accent-color:#287b61; }
+select { padding:5px 10px; border:1px solid #ddcfd9; border-radius:8px; background:#fffcf8; color:#394761; }
+.grade-table thead,.grade-table thead tr,.grade-table th { background:#eee9f5 !important; color:#34405f !important; }
+.grade-table th *,.grade-table th small { color:#515777 !important; }
+.grade-table th { border-color:#ddd4e7 !important; }
+button:focus-visible,select:focus-visible { outline:3px solid #a75c7e; outline-offset:3px; }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; transition:none !important; } }
