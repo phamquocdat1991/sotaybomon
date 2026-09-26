@@ -18,6 +18,7 @@ dist/
 # test and tooling output
 coverage/
 *.log
+*.tsbuildinfo
 
 # operating system files
 .DS_Store

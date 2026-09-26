@@ -1,8 +1,8 @@
-# Sổ tay bộ môn Địa lý
+# Sổ tay bộ môn (Sổ tay giáo viên THCS & THPT)
 
-Phiên bản hiện tại: **4.2.0 — Học đường mộng mơ**.
+Phiên bản hiện tại: **5.0.0 — Học đường tương tác & Chuẩn Thông tư 22**.
 
-Ứng dụng quản lý công việc dành cho giáo viên bộ môn, tái hiện các luồng trong video tham chiếu: tổng quan, thời khóa biểu, theo dõi tiết học, lớp học, hồ sơ học sinh, sổ điểm và thiết lập.
+Ứng dụng quản lý công việc và trợ giảng thông minh dành cho giáo viên bộ môn: Tổng quan điều hành, Thời khóa biểu 38 tuần, Theo dõi tiết học tương tác (Vòng quay may mắn, Đồng hồ nhóm, Bảng vinh danh), Sổ điểm & Xếp loại theo Thông tư 22/2021/TT-BGDĐT, Trợ lý AI Sandwich Feedback và Soạn tin nhắn Zalo gửi Phụ huynh 1-Click.
 
 ## Chạy trên máy
 
@@ -17,22 +17,34 @@ npm run dev
 2. Import repository đó trong Vercel.
 3. Giữ nguyên thiết lập framework Next.js và bấm Deploy.
 
-Dữ liệu của phiên bản này được lưu bằng `localStorage` trên từng trình duyệt; ứng dụng chưa có tài khoản hay cơ sở dữ liệu cloud. Người dùng có thể tải bản sao lưu JSON và khôi phục trên thiết bị khác trong trang Thiết lập.
+Dữ liệu của phiên bản này được lưu an toàn bằng `localStorage` trên từng trình duyệt; ứng dụng có thể hoạt động hoàn toàn ngoại tuyến (Offline) không phụ thuộc đường truyền mạng trường học. Giáo viên có thể tải bản sao lưu JSON và khôi phục trên thiết bị khác trong trang Thiết lập.
 
-Mục Báo cáo tổng hợp điểm, điểm danh và hoạt động theo lớp. Mục Trợ lý AI hiện là trợ lý nhận xét cục bộ theo quy tắc, không gửi dữ liệu học sinh ra dịch vụ bên ngoài và không yêu cầu API key.
+## Nghiệp vụ và tính năng nổi bật (Phiên bản 5.0.0)
 
-## Nghiệp vụ đã hỗ trợ
+### 1. Bộ công cụ Trợ giảng tương tác trên lớp (Mới)
+- **🎡 Vòng quay may mắn / Bốc thăm ngẫu nhiên**: Gọi học sinh phát biểu hoặc kiểm tra bài cũ với hiệu ứng hồi hộp và âm thanh chúc mừng Web Audio API. Lọc thông minh học sinh chưa có điểm hoạt động hoặc loại trừ học sinh vắng.
+- **⏱️ Đồng hồ đếm ngược hoạt động nhóm**: Cài sẵn 30s, 1p, 2p, 3p, 5p; hỗ trợ chiếu toàn màn hình (Projector Mode) và chuông báo khi hết giờ thảo luận.
+- **🏆 Bảng vinh danh tiết học**: Tự động tổng kết Top 3–5 học sinh tích cực nhất tiết học và hỗ trợ 1-click sao chép gửi vào nhóm Zalo lớp.
 
-- Tổng quan dạng command center theo lớp đang chọn.
-- Thời khóa biểu độc lập cho 38 tuần; thêm, sửa, xóa và đánh dấu tiết đã hoàn thành. Lịch cũ chưa có số tuần được giữ ở tuần 1. Thay đổi chỉ áp dụng cho tuần đang xem.
-- Tổng quan cho phép chọn tuần để xem lịch và số tiết đã hoàn thành.
-- Điểm danh, ghi nhận hoạt động, hoàn tác và lưu nhận xét nhanh trong tiết học.
-- Nhập điểm, tính trung bình theo hệ số và xuất CSV.
-- Thêm, sửa, xác nhận trước khi xóa học sinh; nhập `.xlsx`, CSV hoặc dữ liệu dán từ Sheets.
-- Hồ sơ học sinh, báo cáo tiến bộ, trợ lý soạn nhận xét cục bộ và lịch sử thay đổi.
-- Sao lưu/khôi phục JSON và giao diện responsive cho máy tính, máy tính bảng, điện thoại.
+### 2. Chuẩn hóa đánh giá theo Thông tư 22/2021/TT-BGDĐT (Mới)
+- Tính điểm trung bình môn học kỳ có trọng số theo quy chuẩn Bộ GD&ĐT.
+- Tự động xếp loại học lực môn học theo 4 mức: **Tốt, Khá, Đạt, Chưa đạt**, áp dụng chặt chẽ tiêu chí khống chế điểm thành phần.
+- Hiển thị huy hiệu xếp loại TT22 trực quan trong Sổ điểm, Hồ sơ học sinh và Báo cáo tiến bộ.
+- Xuất sổ điểm ra file `.csv` chuẩn Thông tư 22 mở được bằng Microsoft Excel.
+
+### 3. Trợ lý Sư phạm Thông minh & Soạn tin nhắn Zalo 1-Click (Mới)
+- **Lời phê Sandwich Feedback 3 vế**: Khen ngợi nỗ lực cụ thể ➔ Nhắc nhở khéo léo điểm cần khắc phục ➔ Động viên và định hướng giải pháp.
+- **Soạn tin nhắn Zalo gửi Phụ huynh (1-Click Copy)**: 4 kịch bản thiết thực (Khen ngợi nỗ lực, Nhắc nhở học tập, Thông báo chuyên cần vắng/muộn, Báo cáo kết quả định kỳ) với lời chào trang trọng, đầy đủ thông tin để giáo viên gửi trực tiếp qua Zalo.
+- **Hỗ trợ kết nối Google Gemini AI**: Tùy chọn nhập API Key trong Thiết lập để kích hoạt trí tuệ nhân tạo Gemini Flash; nếu để trống, ứng dụng hoạt động ngoại tuyến (Offline) an toàn 100%.
+
+### 4. Quản lý lớp học & Dữ liệu chuyên sâu
+- Thời khóa biểu độc lập cho 38 tuần; theo dõi và đánh dấu tiết đã hoàn thành.
+- Nhập danh sách học sinh từ file Excel `.xlsx`, `.csv` hoặc dán trực tiếp từ Google Sheets.
+- Xem biểu đồ cột tiến trình điểm số từng học sinh, quản lý thông tin liên hệ phụ huynh.
+- Sao lưu & khôi phục toàn bộ dữ liệu ra file JSON, ghi nhật ký chỉnh sửa 80 hoạt động gần nhất.
 
 ## Thông tin bộ khung
+
 
 A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
 
